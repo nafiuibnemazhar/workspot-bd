@@ -1,10 +1,24 @@
-import { ApolloClient, InMemoryCache, HttpLink } from "@apollo/client";
+import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
+import { setContext } from "@apollo/client/link/context";
+
+const httpLink = createHttpLink({
+  uri: "http://workspot-backend.local/graphql",
+});
+
+const authLink = setContext((_, { headers }) => {
+  // Get the token from storage (Client-side only)
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("workspot_token") : "";
+
+  return {
+    headers: {
+      ...headers,
+      authorization: token ? `Bearer ${token}` : "",
+    },
+  };
+});
 
 export const client = new ApolloClient({
-  // Instead of just 'uri', we build the Link explicitly
-  link: new HttpLink({
-    uri: "http://workspot-backend.local/graphql",
-    fetch, // We pass the global fetch to ensure it works on the Server
-  }),
+  link: authLink.concat(httpLink),
   cache: new InMemoryCache(),
 });

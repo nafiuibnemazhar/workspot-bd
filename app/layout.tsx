@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google"; // Professional SaaS Font
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Providers } from "@/components/Providers"; // <--- Import this
 
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"], 
@@ -25,7 +26,10 @@ export default function RootLayout({
         "min-h-screen bg-brand-light font-sans antialiased",
         jakarta.variable
       )}>
-        {children}
+        {/* Wrap the children with our new Provider */}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
