@@ -1,39 +1,36 @@
 @import "tailwindcss";
 
-:root {
-  /* We update the Main Defaults to match our Brand */
-  --background: #FAF3E1; /* Brand Light (Cream) */
-  --foreground: #222222; /* Brand Dark */
-  
-  /* Keep these for reference if needed */
-  --font-sans: Arial, Helvetica, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+@theme {
+  /* 1. The Professional Palette */
+  --color-brand-primary: #0f172a; /* Midnight Teal */
+  --color-brand-accent: #f97316; /* Electric Tangerine */
+  --color-brand-surface: #fafafa; /* Ceramic White */
+  --color-brand-marker: #8b5cf6; /* Vibrant Purple */
+
+  --color-brand-border: #e2e8f0; /* Soft Slate */
+  --color-brand-muted: #64748b; /* Slate Grey */
+
+  /* 2. Backward Compatibility (Mapping old names to new palette) */
+  /* This ensures your existing Navbar/Hero don't break */
+  --color-brand-dark: var(--color-brand-primary);
+  --color-brand-orange: var(--color-brand-accent);
+  --color-brand-light: var(--color-brand-surface);
+  --color-brand-beige: var(--color-brand-border);
+
+  /* 3. Fonts */
+  --font-sans: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui,
+    sans-serif;
 }
 
-/* This is where the magic happens in Tailwind v4 */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-
-  /* Define our Custom Brand Colors here */
-  --color-brand-light: #FAF3E1;
-  --color-brand-beige: #F5E7C6;
-  --color-brand-orange: #FF6D1F;
-  --color-brand-dark: #222222;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #FAF3E1; 
-    --foreground: #222222;
+/* Custom Utilities */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
+/* Base Styles */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  scroll-behavior: smooth; 
+  background-color: var(--color-brand-surface);
+  color: var(--color-brand-primary);
 }
