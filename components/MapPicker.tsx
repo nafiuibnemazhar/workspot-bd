@@ -1,11 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useState } from "react";
 import L from "leaflet";
 
-// Fix for default Leaflet marker icon missing in Next.js
+// Fix for default marker icon
 const icon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl:
@@ -15,53 +15,70 @@ const icon = L.icon({
   iconAnchor: [12, 41],
 });
 
-interface MapPickerProps {
-  onLocationSelect: (lat: number, lng: number) => void;
-}
-
+// Helper to handle clicks
 function LocationMarker({
   onSelect,
+  position,
 }: {
   onSelect: (lat: number, lng: number) => void;
+  position: { lat: number; lng: number };
 }) {
-  const [position, setPosition] = useState<L.LatLng | null>(null);
-
-  // This hook detects clicks on the map
-  useMapEvents({
+  const map = useMapEvents({
     click(e) {
-      setPosition(e.latlng);
       onSelect(e.latlng.lat, e.latlng.lng);
     },
   });
 
-  return position === null ? null : (
-    <Marker position={position} icon={icon}></Marker>
-  );
+  // Fly to the new position if it changes programmatically
+  useEffect(() => {
+    map.flyTo(position, map.getZoom());
+  }, [position, map]);
+
+  return position ? <Marker position={position} icon={icon} /> : null;
 }
 
-export default function MapPicker({ onLocationSelect }: MapPickerProps) {
-  // Default to Dhaka center
-  const dhakaCenter = { lat: 23.7937, lng: 90.4066 };
+interface MapPickerProps {
+  onLocationSelect: (lat: number, lng: number) => void;
+  initialLat?: number;
+  initialLng?: number;
+}
+
+export default function MapPicker({
+  onLocationSelect,
+  initialLat,
+  initialLng,
+}: MapPickerProps) {
+  const [position, setPosition] = useState({
+    lat: initialLat || 23.7937,
+    lng: initialLng || 90.4066,
+  });
+
+  // Update internal state if props change (e.g. data loaded from DB)
+  useEffect(() => {
+    if (initialLat && initialLng) {
+      setPosition({ lat: initialLat, lng: initialLng });
+    }
+  }, [initialLat, initialLng]);
+
+  const handleSelect = (lat: number, lng: number) => {
+    setPosition({ lat, lng });
+    onLocationSelect(lat, lng);
+  };
 
   return (
-    <div className="h-64 w-full rounded-2xl overflow-hidden border border-brand-beige relative z-0">
+    <div className="h-64 w-full rounded-xl overflow-hidden border border-gray-200 z-0">
       <MapContainer
-        center={[dhakaCenter.lat, dhakaCenter.lng]}
-        zoom={13}
-        scrollWheelZoom={false}
+        center={position}
+        zoom={15}
+        scrollWheelZoom={true}
         className="h-full w-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution="&copy; OpenStreetMap"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-        <LocationMarker onSelect={onLocationSelect} />
+        <LocationMarker onSelect={handleSelect} position={position} />
       </MapContainer>
-
-      {/* Helper Text Overlay */}
-      <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-brand-dark z-[400] shadow-sm">
-        Click map to pin location
-      </div>
     </div>
   );
 }

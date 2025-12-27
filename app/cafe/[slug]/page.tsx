@@ -16,6 +16,8 @@ import {
   Star,
   ArrowLeft,
   Clock,
+  Phone,
+  Edit,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -30,27 +32,32 @@ export default function CafeDetails() {
   const [cafe, setCafe] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    async function fetchCafe() {
-      // 1. Get the ID safely
-      const cafeId = params?.id;
-
-      if (!cafeId) return;
+    async function fetchData() {
+      const slug = params?.slug;
+      if (!slug) return;
 
       try {
-        console.log("Fetching Cafe ID:", cafeId);
+        // 1. Fetch User Session (to check if they own this page)
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        setCurrentUser(user);
 
+        // 2. Fetch Cafe Data
+        console.log("Fetching Slug:", slug);
         const { data, error } = await supabase
           .from("cafes")
           .select("*")
-          .eq("id", cafeId)
-          .maybeSingle(); // Use maybeSingle() instead of single() to avoid crashes
+          .eq("slug", slug)
+          .maybeSingle();
 
         if (error) throw error;
 
         if (!data) {
-          setError("This cafe does not exist.");
+          setError("This workspace does not exist.");
         } else {
           setCafe(data);
         }
@@ -62,11 +69,36 @@ export default function CafeDetails() {
       }
     }
 
-    fetchCafe();
-  }, [params?.id]);
+    fetchData();
+  }, [params?.slug]);
+
+  // --- Feature: Native Share ---
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: cafe.name,
+          text: `Check out ${cafe.name} on WorkSpot!`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.log("Error sharing:", err);
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert("Link copied to clipboard!");
+    }
+  };
+
+  // --- Feature: Google Maps ---
+  const handleGetDirections = () => {
+    if (!cafe) return;
+    // This format forces Google Maps to start "Directions" mode
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
+    window.open(url, "_blank");
+  };
 
   // --- RENDER STATES ---
-
   if (loading)
     return (
       <div className="min-h-screen bg-brand-surface flex items-center justify-center">
@@ -77,28 +109,34 @@ export default function CafeDetails() {
   if (error || !cafe)
     return (
       <div className="min-h-screen bg-brand-surface flex flex-col items-center justify-center p-10 text-center">
-        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
-          <ArrowLeft size={24} />
-        </div>
-        <h2 className="text-2xl font-bold text-brand-primary mb-2">Oops!</h2>
-        <p className="text-brand-muted mb-6">
-          {error || "We couldn't find that workspace."}
-        </p>
+        <h2 className="text-2xl font-bold text-brand-primary mb-2">
+          Workspace Not Found
+        </h2>
+        <p className="text-brand-muted mb-6">{error}</p>
         <Link
           href="/"
-          className="bg-brand-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-brand-accent transition-colors"
+          className="bg-brand-primary text-white px-8 py-3 rounded-xl font-bold"
         >
           Back to Home
         </Link>
       </div>
     );
 
-  // --- SUCCESS STATE (The actual page) ---
   return (
-    <div className="min-h-screen bg-brand-surface font-sans">
+    <div className="min-h-screen bg-brand-surface font-sans relative">
       <Navbar />
 
-      {/* Hero Image */}
+      {/* --- ADMIN BUTTON (Only visible to owner) --- */}
+      {currentUser && currentUser.id === cafe.owner_id && (
+        <Link
+          href={`/edit-cafe/${params.slug}`}
+          className="fixed bottom-8 right-8 z-50 bg-brand-primary text-white px-6 py-4 rounded-full font-bold shadow-2xl flex items-center gap-3 hover:scale-105 hover:bg-brand-accent transition-all border-2 border-white/20 animate-fade-in-up"
+        >
+          <Edit size={20} /> Edit Page
+        </Link>
+      )}
+
+      {/* 1. HERO IMAGE */}
       <div className="relative h-[50vh] w-full bg-brand-primary">
         {cafe.cover_image ? (
           <img
@@ -112,6 +150,7 @@ export default function CafeDetails() {
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-brand-primary via-transparent to-transparent"></div>
+
         <div className="absolute top-24 left-6 md:left-20">
           <Link
             href="/"
@@ -122,7 +161,7 @@ export default function CafeDetails() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* 2. MAIN CONTENT */}
       <div className="container mx-auto px-6 -mt-32 relative z-10 pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Left Column */}
@@ -139,7 +178,10 @@ export default function CafeDetails() {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button className="p-3 rounded-full bg-brand-surface hover:bg-brand-border transition-colors text-brand-primary">
+                  <button
+                    onClick={handleShare}
+                    className="p-3 rounded-full bg-brand-surface hover:bg-brand-border transition-colors text-brand-primary active:scale-95"
+                  >
                     <Share2 size={20} />
                   </button>
                   <div className="flex items-center gap-1 font-bold text-brand-primary">
@@ -158,7 +200,8 @@ export default function CafeDetails() {
                 About this space
               </h3>
               <p className="text-brand-muted leading-relaxed text-lg">
-                {cafe.description || "No description provided."}
+                {cafe.description ||
+                  "No description provided for this workspace."}
               </p>
             </div>
 
@@ -203,14 +246,33 @@ export default function CafeDetails() {
                     ৳ {cafe.avg_price}
                   </span>
                 </div>
+
                 <div className="space-y-4 mb-8">
                   <div className="flex items-center gap-3 text-brand-muted">
                     <Clock size={18} />
-                    <span>Open 9:00 AM - 10:00 PM</span>
+                    <span>
+                      {cafe.opening_time
+                        ? `${cafe.opening_time.slice(
+                            0,
+                            5
+                          )} - ${cafe.closing_time?.slice(0, 5)}`
+                        : "Hours not added"}
+                    </span>
                   </div>
+
+                  {cafe.contact_number && (
+                    <div className="flex items-center gap-3 text-brand-muted">
+                      <Phone size={18} />
+                      <span>{cafe.contact_number}</span>
+                    </div>
+                  )}
                 </div>
-                <button className="w-full bg-brand-primary text-white py-4 rounded-xl font-bold hover:bg-brand-accent transition-colors">
-                  Get Directions
+
+                <button
+                  onClick={handleGetDirections}
+                  className="w-full bg-brand-primary text-white py-4 rounded-xl font-bold hover:bg-brand-accent transition-colors shadow-lg hover:shadow-xl flex items-center justify-center gap-2 transform active:scale-98"
+                >
+                  <MapPin size={18} /> Get Directions
                 </button>
               </div>
 
@@ -230,7 +292,6 @@ export default function CafeDetails() {
   );
 }
 
-// Helper
 function AmenityItem({
   icon,
   label,

@@ -38,13 +38,16 @@ export default function AddCafePage() {
     description: "",
     address_text: "",
     avg_price: "",
-    lat: 23.7937, // Default Dhaka
+    lat: 23.7937,
     long: 90.4066,
-    // Amenities
     wifi: true,
     ac: true,
     generator: false,
     outlets: true,
+    // NEW FIELDS
+    opening_time: "09:00",
+    closing_time: "22:00",
+    contact_number: "",
   });
 
   // Check if user is logged in
@@ -72,6 +75,15 @@ export default function AddCafePage() {
 
   const handleLocationSelect = (lat: number, lng: number) => {
     setFormData((prev) => ({ ...prev, lat, long: lng }));
+  };
+
+  const createSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "") // Remove weird chars
+      .replace(/[\s_-]+/g, "-") // Replace spaces with dashes
+      .replace(/^-+|-+$/g, ""); // Trim dashes
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,20 +118,27 @@ export default function AddCafePage() {
         outlets: formData.outlets,
       };
 
+      const slug =
+        createSlug(formData.name) + "-" + Date.now().toString().slice(-4);
+
       // 3. Insert into Supabase (New Schema)
       const { error: insertError } = await supabase.from("cafes").insert([
         {
-          owner_id: user.id, // Link to the logged-in user
+          owner_id: user.id,
           name: formData.name,
+          slug: slug, // <--- SAVING THE SLUG HERE
           description: formData.description,
           address_text: formData.address_text,
           avg_price: parseFloat(formData.avg_price),
           latitude: formData.lat,
           longitude: formData.long,
           cover_image: imageUrl,
-          amenities: amenitiesJson, // Save JSON data
+          opening_time: formData.opening_time,
+          closing_time: formData.closing_time,
+          contact_number: formData.contact_number,
+          amenities: amenitiesJson,
           city: "Dhaka",
-          is_verified: true, // Auto-verify for now so we can see it
+          is_verified: true,
         },
       ]);
 
@@ -225,6 +244,32 @@ export default function AddCafePage() {
                       className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
                       placeholder="e.g. Gulshan 2"
                       value={formData.address_text}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-bold mb-2">
+                      Opens At
+                    </label>
+                    <input
+                      type="time"
+                      name="opening_time"
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
+                      value={formData.opening_time}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">
+                      Closes At
+                    </label>
+                    <input
+                      type="time"
+                      name="closing_time"
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
+                      value={formData.closing_time}
                       onChange={handleChange}
                     />
                   </div>

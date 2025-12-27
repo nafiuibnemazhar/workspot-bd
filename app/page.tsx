@@ -108,7 +108,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {cafes.map((cafe) => (
               <Link
-                href={`/cafe/${cafe.id}`}
+                href={`/cafe/${cafe.slug}`}
                 key={cafe.id}
                 className="group flex flex-col gap-4 cursor-pointer"
               >
