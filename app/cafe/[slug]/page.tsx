@@ -20,6 +20,7 @@ import {
   Edit,
 } from "lucide-react";
 import Link from "next/link";
+import DOMPurify from "dompurify"; // 1. IMPORT SANITIZER
 
 // Dynamic Map Import
 const ViewMap = dynamic(() => import("@/components/ViewMap"), {
@@ -40,14 +41,13 @@ export default function CafeDetails() {
       if (!slug) return;
 
       try {
-        // 1. Fetch User Session (to check if they own this page)
+        // Fetch User Session
         const {
           data: { user },
         } = await supabase.auth.getUser();
         setCurrentUser(user);
 
-        // 2. Fetch Cafe Data
-        console.log("Fetching Slug:", slug);
+        // Fetch Cafe Data
         const { data, error } = await supabase
           .from("cafes")
           .select("*")
@@ -72,7 +72,7 @@ export default function CafeDetails() {
     fetchData();
   }, [params?.slug]);
 
-  // --- Feature: Native Share ---
+  // Feature: Native Share
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -90,10 +90,9 @@ export default function CafeDetails() {
     }
   };
 
-  // --- Feature: Google Maps ---
+  // Feature: Google Maps
   const handleGetDirections = () => {
     if (!cafe) return;
-    // This format forces Google Maps to start "Directions" mode
     const url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
     window.open(url, "_blank");
   };
@@ -126,7 +125,7 @@ export default function CafeDetails() {
     <div className="min-h-screen bg-brand-surface font-sans relative">
       <Navbar />
 
-      {/* --- ADMIN BUTTON (Only visible to owner) --- */}
+      {/* ADMIN BUTTON (Only visible to owner) */}
       {currentUser && currentUser.id === cafe.owner_id && (
         <Link
           href={`/edit-cafe/${params.slug}`}
@@ -136,7 +135,7 @@ export default function CafeDetails() {
         </Link>
       )}
 
-      {/* 1. HERO IMAGE */}
+      {/* HERO IMAGE */}
       <div className="relative h-[50vh] w-full bg-brand-primary">
         {cafe.cover_image ? (
           <img
@@ -161,7 +160,7 @@ export default function CafeDetails() {
         </div>
       </div>
 
-      {/* 2. MAIN CONTENT */}
+      {/* MAIN CONTENT */}
       <div className="container mx-auto px-6 -mt-32 relative z-10 pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Left Column */}
@@ -199,10 +198,17 @@ export default function CafeDetails() {
               <h3 className="text-xl font-bold text-brand-primary mb-4">
                 About this space
               </h3>
-              <p className="text-brand-muted leading-relaxed text-lg">
-                {cafe.description ||
-                  "No description provided for this workspace."}
-              </p>
+
+              {/* 2. RICH TEXT RENDERER */}
+              {/* The 'prose' class automagically styles h1, h2, lists, bold, etc. */}
+              <div
+                className="prose prose-slate max-w-none text-brand-muted leading-relaxed prose-headings:text-brand-primary prose-a:text-brand-accent prose-strong:text-brand-primary"
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(
+                    cafe.description || "No description provided."
+                  ),
+                }}
+              />
             </div>
 
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-brand-border">
@@ -252,10 +258,9 @@ export default function CafeDetails() {
                     <Clock size={18} />
                     <span>
                       {cafe.opening_time
-                        ? `${cafe.opening_time.slice(
-                            0,
-                            5
-                          )} - ${cafe.closing_time?.slice(0, 5)}`
+                        ? `${formatTime(cafe.opening_time)} - ${formatTime(
+                            cafe.closing_time
+                          )}`
                         : "Hours not added"}
                     </span>
                   </div>
@@ -290,6 +295,15 @@ export default function CafeDetails() {
       <Footer />
     </div>
   );
+}
+// Helper: Convert "14:00:00" to "2:00 PM"
+function formatTime(timeStr: string) {
+  if (!timeStr) return "";
+  const [hours, minutes] = timeStr.split(":");
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12; // Convert 0 to 12
+  return `${h12}:${minutes} ${ampm}`;
 }
 
 function AmenityItem({

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
+import RichEditor from "@/components/RichEditor";
 // We use dynamic import for the Map because it needs the browser window
 import dynamic from "next/dynamic";
 import {
@@ -210,14 +211,24 @@ export default function AddCafePage() {
                   <label className="block text-sm font-bold mb-2">
                     Description
                   </label>
-                  <textarea
-                    name="description"
-                    rows={3}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-brand-orange outline-none"
-                    placeholder="Quiet atmosphere, good for calls..."
-                    value={formData.description}
-                    onChange={handleChange}
-                  />
+                  <div>
+                    <label className="block text-sm font-bold mb-2">
+                      Description & Highlights
+                    </label>
+                    <div className="prose-sm">
+                      <RichEditor
+                        value={formData.description}
+                        onChange={(val) =>
+                          setFormData({ ...formData, description: val })
+                        }
+                        placeholder="Tell us about the vibe, the coffee, and the internet speed..."
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Tip: Use headings and bullet points for better visibility
+                      on Google.
+                    </p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

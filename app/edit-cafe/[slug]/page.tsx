@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
 import dynamic from "next/dynamic";
+import RichEditor from "@/components/RichEditor";
 import {
   ArrowLeft,
   Save,
@@ -226,16 +227,18 @@ export default function EditCafePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    name="description"
-                    rows={4}
-                    className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200"
-                    value={formData.description}
-                    onChange={handleChange}
-                  />
+                  <label className="block text-sm font-bold mb-2"></label>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">
+                      Description
+                    </label>
+                    <RichEditor
+                      value={formData.description}
+                      onChange={(val) =>
+                        setFormData({ ...formData, description: val })
+                      }
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
