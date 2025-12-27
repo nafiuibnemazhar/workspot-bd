@@ -51,7 +51,7 @@ export default function Home() {
       <Hero />
 
       {/* 2. FIXED: Removed '-mt-20'. Added 'py-16' for clean spacing. */}
-      <main className="flex-grow container mx-auto px-6 py-16 relative z-10">
+      <main className="grow container mx-auto px-6 py-16 relative z-10">
         {/* Section Header - Now always dark text on light background */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-10">
           <div>
@@ -113,7 +113,7 @@ export default function Home() {
                 className="group flex flex-col gap-4 cursor-pointer"
               >
                 {/* Image Container */}
-                <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gray-100 shadow-sm border border-brand-border/50">
+                <div className="relative aspect-4/3 rounded-3xl overflow-hidden bg-gray-100 shadow-sm border border-brand-border/50">
                   {cafe.cover_image ? (
                     <img
                       src={cafe.cover_image}
