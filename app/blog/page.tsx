@@ -13,11 +13,14 @@ export default function BlogHome() {
 
   useEffect(() => {
     async function fetchPosts() {
+      const now = new Date().toISOString(); // Get current time
+
       const { data } = await supabase
         .from("posts")
         .select("*")
         .eq("published", true)
-        .order("created_at", { ascending: false });
+        .lte("scheduled_at", now) // Logic: "Less Than or Equal to" NOW
+        .order("scheduled_at", { ascending: false }); // Order by schedule date, not create date
 
       if (data) setPosts(data);
       setLoading(false);
@@ -78,7 +81,9 @@ export default function BlogHome() {
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="flex items-center gap-2 text-xs font-bold text-brand-accent mb-3 uppercase tracking-wider">
                     <Calendar size={12} />
-                    {new Date(post.created_at).toLocaleDateString()}
+                    {new Date(
+                      post.scheduled_at || post.created_at
+                    ).toLocaleDateString()}
                   </div>
 
                   <h2 className="text-xl font-bold text-brand-primary mb-3 leading-tight group-hover:text-brand-accent transition-colors">
@@ -91,7 +96,7 @@ export default function BlogHome() {
 
                   <div className="flex items-center gap-2 text-sm font-bold text-brand-primary mt-auto pt-4 border-t border-gray-100">
                     <User size={16} className="text-gray-400" />
-                    <span>Editor</span>
+                    <span>{post.author_name || "WorkSpot Editor"}</span>
                   </div>
                 </div>
               </Link>

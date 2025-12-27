@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
-import RichEditor from "@/components/RichEditor"; // Reusing your Tiptap editor!
+import RichEditor from "@/components/RichEditor";
 import {
   ArrowLeft,
   UploadCloud,
   Save,
   Loader2,
-  Image as ImageIcon,
+  Calendar,
+  User,
+  Link as LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -23,28 +25,41 @@ export default function WriteBlogPage() {
     title: "",
     slug: "",
     excerpt: "",
-    content: "", // HTML content
+    content: "",
     cover_image: "",
+    author_name: "WorkSpot Editor",
+    scheduled_at: "",
   });
 
-  // Auto-generate slug from title
+  // Auto-generate slug from title (only if user hasn't manually edited it)
   const handleTitleChange = (e: any) => {
     const title = e.target.value;
     const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
-    setFormData({ ...formData, title, slug });
+
+    setFormData((prev) => ({
+      ...prev,
+      title,
+      slug:
+        prev.slug === "" ||
+        prev.slug ===
+          prev.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)+/g, "")
+          ? slug
+          : prev.slug,
+    }));
   };
 
-  // Image Upload Logic
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
 
     const file = e.target.files[0];
     setPreviewUrl(URL.createObjectURL(file));
 
-    // Upload to Supabase
     const fileName = `${Date.now()}-${file.name}`;
     const { error } = await supabase.storage
       .from("blog-images")
@@ -77,6 +92,10 @@ export default function WriteBlogPage() {
         excerpt: formData.excerpt,
         content: formData.content,
         cover_image: formData.cover_image,
+        author_name: formData.author_name,
+        scheduled_at: formData.scheduled_at
+          ? new Date(formData.scheduled_at).toISOString()
+          : new Date().toISOString(),
         published: true,
         author_id: user.id,
       },
@@ -85,7 +104,7 @@ export default function WriteBlogPage() {
     if (error) {
       alert("Error: " + error.message);
     } else {
-      router.push("/blog"); // Go to blog home
+      router.push("/blog");
     }
     setLoading(false);
   };
@@ -94,12 +113,12 @@ export default function WriteBlogPage() {
     <div className="min-h-screen bg-brand-surface pb-20">
       <Navbar />
 
-      <div className="max-w-4xl mx-auto px-6 pt-32">
+      <div className="max-w-5xl mx-auto px-6 pt-32">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
             <Link
-              href="/"
+              href="/blog"
               className="p-2 bg-white rounded-full border hover:bg-gray-50"
             >
               <ArrowLeft size={20} />
@@ -125,7 +144,6 @@ export default function WriteBlogPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left: Main Editor */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Title Input */}
             <input
               type="text"
               placeholder="Article Title..."
@@ -134,7 +152,6 @@ export default function WriteBlogPage() {
               className="w-full p-4 text-3xl font-extrabold bg-transparent border-none focus:ring-0 placeholder:text-gray-300 text-brand-primary"
             />
 
-            {/* The Editor */}
             <div className="bg-white rounded-xl shadow-sm border border-brand-border min-h-[500px]">
               <RichEditor
                 value={formData.content}
@@ -170,6 +187,59 @@ export default function WriteBlogPage() {
               </div>
             </div>
 
+            {/* SEO Slug */}
+            <div className="bg-white p-6 rounded-3xl border border-brand-border">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <LinkIcon size={18} /> URL Slug
+              </h3>
+              <input
+                type="text"
+                value={formData.slug}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    slug: e.target.value.toLowerCase().replace(/\s+/g, "-"),
+                  })
+                }
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm font-mono text-brand-accent"
+                placeholder="my-awesome-post"
+              />
+            </div>
+
+            {/* Schedule Date */}
+            <div className="bg-white p-6 rounded-3xl border border-brand-border">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <Calendar size={18} /> Schedule For
+              </h3>
+              <input
+                type="datetime-local"
+                value={formData.scheduled_at}
+                onChange={(e) =>
+                  setFormData({ ...formData, scheduled_at: e.target.value })
+                }
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-2">
+                Leave blank to publish now.
+              </p>
+            </div>
+
+            {/* Author */}
+            <div className="bg-white p-6 rounded-3xl border border-brand-border">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <User size={18} /> Author
+              </h3>
+              <input
+                type="text"
+                value={formData.author_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, author_name: e.target.value })
+                }
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm"
+                placeholder="WorkSpot Editor"
+              />
+            </div>
+
             {/* Excerpt */}
             <div className="bg-white p-6 rounded-3xl border border-brand-border">
               <h3 className="font-bold text-lg mb-2">Short Summary</h3>
@@ -182,17 +252,6 @@ export default function WriteBlogPage() {
                   setFormData({ ...formData, excerpt: e.target.value })
                 }
               />
-            </div>
-
-            {/* Slug (URL) */}
-            <div className="bg-white p-6 rounded-3xl border border-brand-border">
-              <h3 className="font-bold text-lg mb-2">URL Slug</h3>
-              <div className="flex items-center gap-1 text-gray-400 text-xs bg-gray-50 p-2 rounded-lg break-all">
-                <span>workspot.bd/blog/</span>
-                <span className="text-brand-primary font-mono">
-                  {formData.slug}
-                </span>
-              </div>
             </div>
           </div>
         </div>

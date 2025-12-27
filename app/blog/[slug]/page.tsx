@@ -71,12 +71,23 @@ export default function SinglePostPage() {
 
           <div className="flex items-center justify-center gap-6 text-sm font-medium text-white/60">
             <span className="flex items-center gap-2">
-              <Calendar size={14} />{" "}
-              {new Date(post.created_at).toLocaleDateString()}
+              <Calendar size={14} />
+              {new Date(
+                post.scheduled_at || post.created_at
+              ).toLocaleDateString()}
             </span>
             <span className="flex items-center gap-2">
-              <User size={14} /> By Editor
+              <User size={14} />
+              {post.author_name || "WorkSpot Editor"}
             </span>
+            <div className="absolute top-0 right-0">
+              <Link
+                href={`/admin/edit-post/${post.id}`}
+                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-full text-sm font-bold backdrop-blur-md"
+              >
+                Edit Post
+              </Link>
+            </div>
           </div>
         </div>
       </div>
