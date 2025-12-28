@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import dynamic from "next/dynamic";
 import StarRating from "@/components/StarRating";
 import ReviewSection from "@/components/ReviewSection";
+import FavoriteButton from "@/components/FavoriteButton";
 import {
   Wifi,
   Wind,
@@ -266,13 +267,17 @@ export default function CafeDetails() {
                   <div className="flex items-center gap-2">
                     <StarRating rating={cafe.rating} />
                   </div>
-                  <button
-                    onClick={() => setShareModalOpen(true)}
-                    className="p-3 rounded-full bg-gray-50 hover:bg-gray-100 text-brand-primary transition-colors border border-gray-200 cursor-pointer"
-                    title="Share this page"
-                  >
-                    <Share2 size={20} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* NEW FAVORITE BUTTON */}
+                    <FavoriteButton cafeId={cafe.id} />
+                    <button
+                      onClick={() => setShareModalOpen(true)}
+                      className="p-3 rounded-full bg-gray-50 hover:bg-gray-100 text-brand-primary transition-colors border border-gray-200 cursor-pointer"
+                      title="Share this page"
+                    >
+                      <Share2 size={20} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
