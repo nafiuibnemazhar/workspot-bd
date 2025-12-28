@@ -152,7 +152,7 @@ export default function WriteBlogPage() {
               className="w-full p-4 text-3xl font-extrabold bg-transparent border-none focus:ring-0 placeholder:text-gray-300 text-brand-primary"
             />
 
-            <div className="bg-white rounded-xl shadow-sm border border-brand-border min-h-[500px]">
+            <div className="bg-white rounded-xl shadow-sm border border-brand-border min-h-125">
               <RichEditor
                 value={formData.content}
                 onChange={(val) => setFormData({ ...formData, content: val })}

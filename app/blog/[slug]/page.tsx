@@ -99,7 +99,7 @@ export default function SinglePostPage() {
           {post.cover_image && (
             <img
               src={post.cover_image}
-              className="w-full h-64 md:h-[400px] object-cover rounded-2xl mb-12 shadow-sm"
+              className="w-full h-64 md:h-100 object-cover rounded-2xl mb-12 shadow-sm"
             />
           )}
 

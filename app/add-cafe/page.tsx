@@ -209,6 +209,26 @@ export default function AddCafePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-2">
+                    Rating (0 - 5)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    value={formData.rating || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        rating: parseFloat(e.target.value),
+                      })
+                    }
+                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-brand-accent focus:border-transparent outline-none transition-all"
+                    placeholder="e.g. 4.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2">
                     Description
                   </label>
                   <div>

@@ -20,6 +20,12 @@ export default function Footer() {
               Home
             </Link>
             <Link
+              href="/blog"
+              className="hover:text-brand-primary transition-colors"
+            >
+              Journal
+            </Link>
+            <Link
               href="/add-cafe"
               className="hover:text-brand-orange transition-colors"
             >

@@ -178,7 +178,7 @@ export default function EditPostPage() {
               placeholder="Post Title"
             />
 
-            <div className="bg-white rounded-xl shadow-sm border border-brand-border min-h-[500px]">
+            <div className="bg-white rounded-xl shadow-sm border border-brand-border min-h-125">
               <RichEditor
                 value={formData.content}
                 onChange={(val) => setFormData({ ...formData, content: val })}
