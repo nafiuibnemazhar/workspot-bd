@@ -3,8 +3,10 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import { TextStyle } from "@tiptap/extension-text-style"; // FIXED: Added { }
+import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
+import ImageExtension from "@tiptap/extension-image"; // NEW
+import { supabase } from "@/lib/supabase"; // Needed for upload
 import {
   Bold,
   Italic,
@@ -15,7 +17,9 @@ import {
   Heading3,
   Palette,
   Unlink,
+  ImageIcon,
 } from "lucide-react";
+import { useCallback } from "react";
 
 interface RichEditorProps {
   value: string;
@@ -33,6 +37,7 @@ export default function RichEditor({
       StarterKit,
       TextStyle,
       Color,
+      ImageExtension, // Enable Images
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -44,7 +49,7 @@ export default function RichEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none focus:outline-none min-h-[150px] p-4 text-brand-primary placeholder:text-gray-400",
+          "prose prose-sm max-w-none focus:outline-none min-h-[300px] p-4 text-brand-primary placeholder:text-gray-400 [&_img]:rounded-xl [&_img]:shadow-lg [&_img]:mx-auto [&_img]:max-h-[500px]",
       },
     },
     onUpdate: ({ editor }) => {
@@ -53,41 +58,77 @@ export default function RichEditor({
     immediatelyRender: false,
   });
 
+  // NEW: Handle Image Upload inside Editor
+  const addImage = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+
+    input.onchange = async () => {
+      if (input.files?.length) {
+        const file = input.files[0];
+        const fileName = `content-${Date.now()}-${file.name}`;
+
+        // 1. Upload
+        const { error } = await supabase.storage
+          .from("blog-images")
+          .upload(fileName, file);
+
+        if (error) {
+          alert("Upload failed");
+          return;
+        }
+
+        // 2. Get URL
+        const { data } = supabase.storage
+          .from("blog-images")
+          .getPublicUrl(fileName);
+
+        // 3. Ask for Alt Text (SEO)
+        const altText = window.prompt(
+          "Describe this image for SEO (Alt Text):",
+          ""
+        );
+
+        // 4. Insert into Editor
+        if (editor) {
+          editor
+            .chain()
+            .focus()
+            .setImage({ src: data.publicUrl, alt: altText || "" })
+            .run();
+        }
+      }
+    };
+
+    input.click();
+  }, [editor]);
+
   if (!editor) return null;
 
   // Function to add/edit links
   const setLink = () => {
     const previousUrl = editor.getAttributes("link").href;
-    const url = window.prompt(
-      "Enter URL (e.g. https://google.com)",
-      previousUrl
-    );
-
-    // cancelled
+    const url = window.prompt("Enter URL", previousUrl);
     if (url === null) return;
-
-    // empty
     if (url === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
       return;
     }
-
-    // update
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden focus-within:ring-2 focus-within:ring-brand-accent transition-all">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 p-2 bg-gray-50/50">
-        {/* Headings */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 p-2 bg-gray-50/50 sticky top-0 z-10">
         <ToolbarBtn
           onClick={() =>
             editor.chain().focus().toggleHeading({ level: 2 }).run()
           }
           isActive={editor.isActive("heading", { level: 2 })}
           icon={<Heading2 size={18} />}
-          title="Heading 2"
+          title="H2 Heading"
         />
         <ToolbarBtn
           onClick={() =>
@@ -95,12 +136,11 @@ export default function RichEditor({
           }
           isActive={editor.isActive("heading", { level: 3 })}
           icon={<Heading3 size={18} />}
-          title="Heading 3"
+          title="H3 Heading"
         />
 
         <div className="w-px h-5 bg-gray-300 mx-1" />
 
-        {/* Text Style */}
         <ToolbarBtn
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive("bold")}
@@ -112,7 +152,7 @@ export default function RichEditor({
           icon={<Italic size={16} />}
         />
 
-        {/* Color Picker (Hidden Input Trick) */}
+        {/* Color Picker */}
         <label
           className={`p-2 rounded-lg cursor-pointer transition-colors ${
             editor.isActive("textStyle") ? "bg-gray-200" : "hover:bg-gray-200"
@@ -138,7 +178,6 @@ export default function RichEditor({
 
         <div className="w-px h-5 bg-gray-300 mx-1" />
 
-        {/* Lists */}
         <ToolbarBtn
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           isActive={editor.isActive("bulletList")}
@@ -152,12 +191,20 @@ export default function RichEditor({
 
         <div className="w-px h-5 bg-gray-300 mx-1" />
 
-        {/* Link */}
         <ToolbarBtn
           onClick={setLink}
           isActive={editor.isActive("link")}
           icon={<LinkIcon size={16} />}
         />
+
+        {/* NEW: Image Button */}
+        <ToolbarBtn
+          onClick={addImage}
+          isActive={false}
+          icon={<ImageIcon size={16} />}
+          title="Insert Image"
+        />
+
         {editor.isActive("link") && (
           <button
             onClick={() => editor.chain().focus().unsetLink().run()}
@@ -169,7 +216,6 @@ export default function RichEditor({
         )}
       </div>
 
-      {/* Editor Area */}
       <EditorContent editor={editor} />
     </div>
   );

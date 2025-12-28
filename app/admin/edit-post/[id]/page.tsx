@@ -13,7 +13,8 @@ import {
   User,
   Link as LinkIcon,
   Trash2,
-} from "lucide-react";
+  UploadCloud,
+} from "lucide-react"; // Added UploadCloud
 import Link from "next/link";
 
 export default function EditPostPage() {
@@ -45,7 +46,6 @@ export default function EditPostPage() {
         alert("Error fetching post");
         router.push("/blog");
       } else {
-        // Format date for input field (YYYY-MM-DDTHH:MM)
         const dateStr = data.scheduled_at
           ? new Date(data.scheduled_at).toISOString().slice(0, 16)
           : "";
@@ -65,7 +65,29 @@ export default function EditPostPage() {
     fetchPost();
   }, [params.id]);
 
-  // 2. Handle Update
+  // 2. Handle Image Upload (Re-upload logic)
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+
+    const file = e.target.files[0];
+    const fileName = `${Date.now()}-${file.name}`;
+
+    // Upload
+    const { error } = await supabase.storage
+      .from("blog-images")
+      .upload(fileName, file);
+
+    if (error) {
+      alert("Upload failed: " + error.message);
+    } else {
+      const { data } = supabase.storage
+        .from("blog-images")
+        .getPublicUrl(fileName);
+      setFormData((prev) => ({ ...prev, cover_image: data.publicUrl }));
+    }
+  };
+
+  // 3. Handle Update
   const handleUpdate = async () => {
     setSaving(true);
 
@@ -73,9 +95,10 @@ export default function EditPostPage() {
       .from("posts")
       .update({
         title: formData.title,
-        slug: formData.slug, // Manually editable slug
+        slug: formData.slug,
         excerpt: formData.excerpt,
         content: formData.content,
+        cover_image: formData.cover_image, // Save the new image URL
         author_name: formData.author_name,
         scheduled_at: formData.scheduled_at
           ? new Date(formData.scheduled_at).toISOString()
@@ -92,7 +115,7 @@ export default function EditPostPage() {
     setSaving(false);
   };
 
-  // 3. Handle Delete
+  // 4. Handle Delete
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this post?")) return;
 
@@ -165,6 +188,46 @@ export default function EditPostPage() {
 
           {/* Right: Meta Controls */}
           <div className="space-y-6">
+            {/* --- NEW: Cover Image Control --- */}
+            <div className="bg-white p-6 rounded-3xl border border-brand-border">
+              <h3 className="font-bold text-lg mb-4 flex items-center justify-between">
+                Cover Image
+                {formData.cover_image && (
+                  <span className="text-xs text-brand-accent font-normal cursor-pointer">
+                    Click to change
+                  </span>
+                )}
+              </h3>
+
+              <div className="relative w-full h-48 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden group hover:border-brand-accent transition-colors cursor-pointer">
+                {formData.cover_image ? (
+                  <>
+                    <img
+                      src={formData.cover_image}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white font-bold text-sm flex items-center gap-2">
+                        <UploadCloud size={16} /> Change Image
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-brand-muted/40">
+                    <UploadCloud size={32} className="mb-2" />
+                    <span className="text-sm font-bold">Upload</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  onChange={handleImageUpload}
+                />
+              </div>
+            </div>
+            {/* -------------------------------- */}
+
             {/* SEO Slug Control */}
             <div className="bg-white p-6 rounded-3xl border border-brand-border">
               <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
