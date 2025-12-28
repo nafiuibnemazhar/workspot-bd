@@ -1,417 +1,582 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
 import RichEditor from "@/components/RichEditor";
-// We use dynamic import for the Map because it needs the browser window
-import dynamic from "next/dynamic";
 import {
   ArrowLeft,
-  Save,
+  Plus,
+  Loader2,
+  Link as LinkIcon,
+  MapPin,
   Image as ImageIcon,
   UploadCloud,
-  Loader2,
+  Clock,
+  DollarSign,
+  Star,
+  Globe,
+  Facebook,
+  Instagram,
 } from "lucide-react";
 import Link from "next/link";
 
-// Dynamically import the MapPicker (disables server-side rendering for this component)
-const MapPicker = dynamic(() => import("@/components/MapPicker"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-64 w-full bg-gray-100 animate-pulse rounded-2xl flex items-center justify-center text-gray-400">
-      Loading Map...
-    </div>
-  ),
-});
-
 export default function AddCafePage() {
   const router = useRouter();
-  const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // State for the new PRO database fields
+  const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<string>("");
+
   const [formData, setFormData] = useState({
     name: "",
+    slug: "",
     description: "",
-    address_text: "",
-    avg_price: "",
-    lat: 23.7937,
-    long: 90.4066,
-    wifi: true,
-    ac: true,
-    generator: false,
-    outlets: true,
-    // NEW FIELDS
-    opening_time: "09:00",
-    closing_time: "22:00",
-    contact_number: "",
+    location: "",
+    google_map: "",
+    latitude: "",
+    longitude: "",
+    cover_image: "",
+    instagram_url: "",
+    facebook_url: "",
+    opening_time: "",
+    closing_time: "",
+    has_wifi: false,
+    has_ac: false,
+    has_parking: false,
+    has_socket: false,
+    rating: 0,
+    avg_price: 0,
   });
 
-  // Check if user is logged in
-  useEffect(() => {
-    async function checkUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login"); // Kick them to login if not authenticated
-      } else {
-        setUser(user);
-      }
-    }
-    checkUser();
-  }, [router]);
+  // 1. IMAGE UPLOAD LOGIC
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
-  };
-
-  const handleLocationSelect = (lat: number, lng: number) => {
-    setFormData((prev) => ({ ...prev, lat, long: lng }));
-  };
-
-  const createSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, "") // Remove weird chars
-      .replace(/[\s_-]+/g, "-") // Replace spaces with dashes
-      .replace(/^-+|-+$/g, ""); // Trim dashes
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return alert("You must be logged in");
+    const file = e.target.files[0];
     setUploading(true);
 
     try {
-      let imageUrl = null;
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `covers/${fileName}`;
 
-      // 1. Upload Image
-      if (selectedFile) {
-        const fileExt = selectedFile.name.split(".").pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from("cafe-images")
-          .upload(fileName, selectedFile);
+      // Upload to 'cafes' bucket
+      const { error: uploadError } = await supabase.storage
+        .from("cafes")
+        .upload(filePath, file);
 
-        if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("cafe-images").getPublicUrl(fileName);
-        imageUrl = publicUrl;
-      }
+      // Get Public URL
+      const { data } = supabase.storage.from("cafes").getPublicUrl(filePath);
 
-      // 2. Prepare Amenities JSON
-      const amenitiesJson = {
-        wifi: formData.wifi,
-        ac: formData.ac,
-        generator: formData.generator,
-        outlets: formData.outlets,
-      };
-
-      const slug =
-        createSlug(formData.name) + "-" + Date.now().toString().slice(-4);
-
-      // 3. Insert into Supabase (New Schema)
-      const { error: insertError } = await supabase.from("cafes").insert([
-        {
-          owner_id: user.id,
-          name: formData.name,
-          slug: slug, // <--- SAVING THE SLUG HERE
-          description: formData.description,
-          address_text: formData.address_text,
-          avg_price: parseFloat(formData.avg_price),
-          latitude: formData.lat,
-          longitude: formData.long,
-          cover_image: imageUrl,
-          opening_time: formData.opening_time,
-          closing_time: formData.closing_time,
-          contact_number: formData.contact_number,
-          amenities: amenitiesJson,
-          city: "Dhaka",
-          is_verified: true,
-        },
-      ]);
-
-      if (insertError) throw insertError;
-
-      router.push("/");
+      setFormData({ ...formData, cover_image: data.publicUrl });
+      setPreview(data.publicUrl);
     } catch (error: any) {
-      console.error("Error:", error);
-      alert("Failed to publish: " + error.message);
+      alert("Error uploading image: " + error.message);
     } finally {
       setUploading(false);
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value, type } = e.target;
-    if (type === "checkbox") {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData((prev) => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.location) {
+      alert("Please fill in at least the Name and Location.");
+      return;
     }
+
+    setSubmitting(true);
+
+    const finalSlug =
+      formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("cafes").insert([
+      {
+        name: formData.name,
+        slug: finalSlug,
+        description: formData.description,
+        location: formData.location,
+        google_map: formData.google_map,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        cover_image: formData.cover_image,
+        instagram_url: formData.instagram_url,
+        facebook_url: formData.facebook_url,
+        opening_time: formData.opening_time,
+        closing_time: formData.closing_time,
+        avg_price: formData.avg_price,
+        rating: formData.rating,
+        has_wifi: formData.has_wifi,
+        has_ac: formData.has_ac,
+        has_parking: formData.has_parking,
+        has_socket: formData.has_socket,
+        owner_id: user?.id,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (error) {
+      alert("Error: " + error.message);
+    } else {
+      router.push(`/cafe/${finalSlug}`);
+    }
+    setSubmitting(false);
   };
 
-  if (!user) return null; // Don't show form until check is done
-
   return (
-    <div className="min-h-screen bg-brand-light">
+    <div className="min-h-screen bg-gray-50/50 pb-20 font-sans">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-6 pt-32 pb-20">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-brand-dark/50 hover:text-brand-orange mb-4 text-sm font-bold"
-        >
-          <ArrowLeft size={16} /> Cancel
-        </Link>
-        <h1 className="text-3xl font-extrabold text-brand-dark mb-8">
-          Add a Workspace
-        </h1>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-        >
-          {/* Left Column: Form Inputs */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-brand-beige shadow-sm">
-              <h3 className="font-bold text-lg mb-4 text-brand-dark">
-                Basic Info
+      <div className="max-w-6xl mx-auto px-6 pt-28">
+        {/* HEADER ACTION BAR */}
+        <div className="flex justify-between items-center mb-8 sticky top-24 z-20 bg-gray-50/90 backdrop-blur-sm py-4">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="p-2.5 bg-white rounded-full border border-gray-200 hover:bg-gray-100 text-gray-600 transition-all"
+            >
+              <ArrowLeft size={20} />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-extrabold text-gray-900">
+                Add New Workspace
+              </h1>
+              <p className="text-sm text-gray-500">
+                Create a new listing for the directory
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.back()}
+              className="px-6 py-2.5 font-bold text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="bg-brand-primary text-white px-8 py-2.5 rounded-xl font-bold hover:bg-brand-accent transition-all flex items-center gap-2 shadow-lg shadow-brand-primary/20 disabled:opacity-50 cursor-pointer active:scale-95"
+            >
+              {submitting ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <Plus size={18} />
+              )}{" "}
+              Publish Listing
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* --- LEFT COLUMN: MAIN CONTENT --- */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* 1. ESSENTIALS */}
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm">
+                  01
+                </span>
+                Basic Information
               </h3>
-              <div className="space-y-4">
+
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold mb-2">
-                    Cafe Name
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Workspace Name
                   </label>
                   <input
                     type="text"
-                    name="name"
-                    required
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-brand-orange outline-none"
-                    placeholder="e.g. North End Coffee"
                     value={formData.name}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">
-                    Rating (0 - 5)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="5"
-                    value={formData.rating || ""}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        rating: parseFloat(e.target.value),
-                      })
+                      setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-brand-accent focus:border-transparent outline-none transition-all"
-                    placeholder="e.g. 4.5"
+                    className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 focus:border-brand-accent outline-none transition-all font-bold text-lg text-gray-900 placeholder-gray-400"
+                    placeholder="e.g. North End Coffee Roasters"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-bold mb-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
                     Description
                   </label>
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      Description & Highlights
-                    </label>
-                    <div className="prose-sm">
-                      <RichEditor
-                        value={formData.description}
-                        onChange={(val) =>
-                          setFormData({ ...formData, description: val })
-                        }
-                        placeholder="Tell us about the vibe, the coffee, and the internet speed..."
-                      />
-                    </div>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Tip: Use headings and bullet points for better visibility
-                      on Google.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      Avg Price (Tk)
-                    </label>
-                    <input
-                      type="number"
-                      name="avg_price"
-                      required
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
-                      placeholder="300"
-                      value={formData.avg_price}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      Address Area
-                    </label>
-                    <input
-                      type="text"
-                      name="address_text"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
-                      placeholder="e.g. Gulshan 2"
-                      value={formData.address_text}
-                      onChange={handleChange}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      Opens At
-                    </label>
-                    <input
-                      type="time"
-                      name="opening_time"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
-                      value={formData.opening_time}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      Closes At
-                    </label>
-                    <input
-                      type="time"
-                      name="closing_time"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl"
-                      value={formData.closing_time}
-                      onChange={handleChange}
+                  <div className="prose-editor-wrapper">
+                    <RichEditor
+                      value={formData.description}
+                      onChange={(val) =>
+                        setFormData({ ...formData, description: val })
+                      }
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-brand-beige shadow-sm">
-              <h3 className="font-bold text-lg mb-4 text-brand-dark">
-                Amenities
+            {/* 2. MEDIA UPLOAD */}
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm">
+                  02
+                </span>
+                Cover Image
               </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:border-brand-orange">
+
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-brand-accent hover:bg-brand-accent/5 group ${
+                  preview
+                    ? "border-brand-accent bg-brand-accent/5"
+                    : "border-gray-200"
+                }`}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  accept="image/*"
+                />
+
+                {uploading ? (
+                  <div className="flex flex-col items-center gap-2 text-brand-accent">
+                    <Loader2 className="animate-spin" size={32} />
+                    <span className="font-bold">Uploading...</span>
+                  </div>
+                ) : preview ? (
+                  <div className="w-full relative group">
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="w-full h-64 object-cover rounded-xl shadow-md"
+                    />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                      <p className="text-white font-bold flex items-center gap-2">
+                        <ImageIcon /> Change Image
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-2">
+                    <div className="w-16 h-16 bg-blue-50 text-brand-accent rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                      <UploadCloud size={32} />
+                    </div>
+                    <h4 className="text-gray-900 font-bold">
+                      Click to upload image
+                    </h4>
+                    <p className="text-gray-400 text-sm">
+                      SVG, PNG, JPG or GIF (max. 5MB)
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. LOCATION */}
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-sm">
+                  03
+                </span>
+                Location Details
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Short Address
+                  </label>
+                  <div className="relative">
+                    <MapPin
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      value={formData.location}
+                      onChange={(e) =>
+                        setFormData({ ...formData, location: e.target.value })
+                      }
+                      className="w-full pl-12 p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none"
+                      placeholder="e.g. Banani, Road 11"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Latitude
+                  </label>
                   <input
-                    type="checkbox"
-                    name="wifi"
-                    checked={formData.wifi}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-brand-orange"
+                    type="number"
+                    step="any"
+                    value={formData.latitude}
+                    onChange={(e) =>
+                      setFormData({ ...formData, latitude: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none font-mono text-sm"
+                    placeholder="23.7937"
                   />
-                  <span className="font-medium">Fast Wifi</span>
-                </label>
-                <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:border-brand-orange">
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Longitude
+                  </label>
                   <input
-                    type="checkbox"
-                    name="ac"
-                    checked={formData.ac}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-brand-orange"
+                    type="number"
+                    step="any"
+                    value={formData.longitude}
+                    onChange={(e) =>
+                      setFormData({ ...formData, longitude: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none font-mono text-sm"
+                    placeholder="90.4066"
                   />
-                  <span className="font-medium">Air Conditioned</span>
-                </label>
-                <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:border-brand-orange">
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Google Maps Link
+                  </label>
                   <input
-                    type="checkbox"
-                    name="generator"
-                    checked={formData.generator}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-brand-orange"
+                    type="text"
+                    value={formData.google_map}
+                    onChange={(e) =>
+                      setFormData({ ...formData, google_map: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none text-sm text-blue-600"
+                    placeholder="https://maps.google.com/..."
                   />
-                  <span className="font-medium">Generator Backup</span>
-                </label>
-                <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:border-brand-orange">
-                  <input
-                    type="checkbox"
-                    name="outlets"
-                    checked={formData.outlets}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-brand-orange"
-                  />
-                  <span className="font-medium">Power Outlets</span>
-                </label>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Map & Image */}
+          {/* --- RIGHT COLUMN: SIDEBAR --- */}
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-brand-beige shadow-sm">
-              <h3 className="font-bold text-lg mb-4 text-brand-dark">
-                Location
+            {/* 4. OPERATIONS */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Clock size={18} className="text-gray-400" /> Operational
               </h3>
-              <p className="text-xs text-gray-500 mb-2">
-                Click on the map to pin the exact location.
-              </p>
-              <MapPicker onLocationSelect={handleLocationSelect} />
-              <div className="mt-2 text-xs text-gray-400 font-mono">
-                Lat: {formData.lat.toFixed(4)}, Long: {formData.long.toFixed(4)}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">
+                    Opens
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.opening_time}
+                    onChange={(e) =>
+                      setFormData({ ...formData, opening_time: e.target.value })
+                    }
+                    className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">
+                    Closes
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.closing_time}
+                    onChange={(e) =>
+                      setFormData({ ...formData, closing_time: e.target.value })
+                    }
+                    className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">
+                    Avg Price (Tk)
+                  </label>
+                  <div className="relative">
+                    <DollarSign
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                    <input
+                      type="number"
+                      value={formData.avg_price || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          avg_price: parseInt(e.target.value),
+                        })
+                      }
+                      className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
+                      placeholder="400"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">
+                    Rating (0-5)
+                  </label>
+                  <div className="relative">
+                    <Star
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-yellow-500"
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      max="5"
+                      value={formData.rating || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          rating: parseFloat(e.target.value),
+                        })
+                      }
+                      className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
+                      placeholder="4.5"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-brand-beige shadow-sm">
-              <h3 className="font-bold text-lg mb-4 text-brand-dark">
-                Cover Photo
+            {/* 5. AMENITIES */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
+                Amenities
               </h3>
-              <div className="relative w-full h-48 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden group hover:border-brand-orange transition-colors">
-                {previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-brand-dark/40">
-                    <UploadCloud size={32} className="mb-2" />
-                    <p className="text-sm font-bold">Upload Image</p>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  onChange={handleFileSelect}
+              <div className="space-y-1">
+                <Toggle
+                  label="Free Wi-Fi"
+                  checked={formData.has_wifi}
+                  onChange={(v) => setFormData({ ...formData, has_wifi: v })}
+                />
+                <Toggle
+                  label="Air Conditioned"
+                  checked={formData.has_ac}
+                  onChange={(v) => setFormData({ ...formData, has_ac: v })}
+                />
+                <Toggle
+                  label="Parking"
+                  checked={formData.has_parking}
+                  onChange={(v) => setFormData({ ...formData, has_parking: v })}
+                />
+                <Toggle
+                  label="Power Sockets"
+                  checked={formData.has_socket}
+                  onChange={(v) => setFormData({ ...formData, has_socket: v })}
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={uploading}
-              className="w-full bg-brand-dark text-white px-8 py-4 rounded-xl font-bold hover:bg-brand-orange transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-1"
-            >
-              {uploading ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Save size={18} />
-              )}{" "}
-              {uploading ? "Publishing..." : "Publish Workspace"}
-            </button>
+            {/* 6. SOCIALS & SEO */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
+                Social & Meta
+              </h3>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Instagram
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    value={formData.instagram_url}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        instagram_url: e.target.value,
+                      })
+                    }
+                    className="w-full pl-9 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs"
+                    placeholder="Instagram URL"
+                  />
+                </div>
+                <div className="relative">
+                  <Facebook
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    value={formData.facebook_url}
+                    onChange={(e) =>
+                      setFormData({ ...formData, facebook_url: e.target.value })
+                    }
+                    className="w-full pl-9 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs"
+                    placeholder="Facebook URL"
+                  />
+                </div>
+                <div className="pt-2 border-t border-gray-100 mt-2">
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">
+                    URL Slug
+                  </label>
+                  <div className="relative">
+                    <LinkIcon
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                    <input
+                      type="text"
+                      value={formData.slug}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          slug: e.target.value
+                            .toLowerCase()
+                            .replace(/\s+/g, "-"),
+                        })
+                      }
+                      className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs font-mono text-brand-accent"
+                      placeholder="auto-generated"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between cursor-pointer p-3 hover:bg-gray-50 rounded-xl transition-colors group">
+      <span className="text-sm font-semibold text-gray-700 group-hover:text-brand-primary">
+        {label}
+      </span>
+      <div
+        className={`w-12 h-6 rounded-full p-1 transition-colors relative ${
+          checked ? "bg-brand-primary" : "bg-gray-200"
+        }`}
+      >
+        <div
+          className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+            checked ? "translate-x-6" : "translate-x-0"
+          }`}
+        />
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="hidden"
+      />
+    </label>
   );
 }

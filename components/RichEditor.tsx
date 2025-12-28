@@ -5,8 +5,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
-import ImageExtension from "@tiptap/extension-image"; // NEW
-import { supabase } from "@/lib/supabase"; // Needed for upload
+import ImageExtension from "@tiptap/extension-image";
+import { supabase } from "@/lib/supabase";
 import {
   Bold,
   Italic,
@@ -34,10 +34,27 @@ export default function RichEditor({
 }: RichEditorProps) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      TextStyle,
-      Color,
-      ImageExtension, // Enable Images
+      // 1. FIXED: Load Style Extensions BEFORE StarterKit
+      TextStyle.configure({
+        types: ["text"],
+      }),
+      Color.configure({
+        types: ["textStyle"],
+      }),
+
+      // 2. Then Load Content Extensions
+      StarterKit.configure({
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+      }),
+
+      ImageExtension,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -48,8 +65,9 @@ export default function RichEditor({
     content: value,
     editorProps: {
       attributes: {
+        // 3. FIXED: Removed 'text-brand-primary' to prevent CSS overrides
         class:
-          "prose prose-sm max-w-none focus:outline-none min-h-[300px] p-4 text-brand-primary placeholder:text-gray-400 [&_img]:rounded-xl [&_img]:shadow-lg [&_img]:mx-auto [&_img]:max-h-[500px]",
+          "prose prose-sm max-w-none focus:outline-none min-h-[300px] p-4 placeholder:text-gray-400 [&_img]:rounded-xl [&_img]:shadow-lg [&_img]:mx-auto [&_img]:max-h-[500px]",
       },
     },
     onUpdate: ({ editor }) => {
@@ -58,7 +76,7 @@ export default function RichEditor({
     immediatelyRender: false,
   });
 
-  // NEW: Handle Image Upload inside Editor
+  // Handle Image Upload
   const addImage = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -69,28 +87,21 @@ export default function RichEditor({
         const file = input.files[0];
         const fileName = `content-${Date.now()}-${file.name}`;
 
-        // 1. Upload
         const { error } = await supabase.storage
           .from("blog-images")
           .upload(fileName, file);
 
         if (error) {
-          alert("Upload failed");
+          alert("Upload failed: " + error.message);
           return;
         }
 
-        // 2. Get URL
         const { data } = supabase.storage
           .from("blog-images")
           .getPublicUrl(fileName);
 
-        // 3. Ask for Alt Text (SEO)
-        const altText = window.prompt(
-          "Describe this image for SEO (Alt Text):",
-          ""
-        );
+        const altText = window.prompt("Describe this image (Alt Text):", "");
 
-        // 4. Insert into Editor
         if (editor) {
           editor
             .chain()
@@ -106,7 +117,6 @@ export default function RichEditor({
 
   if (!editor) return null;
 
-  // Function to add/edit links
   const setLink = () => {
     const previousUrl = editor.getAttributes("link").href;
     const url = window.prompt("Enter URL", previousUrl);
@@ -152,12 +162,8 @@ export default function RichEditor({
           icon={<Italic size={16} />}
         />
 
-        {/* Color Picker */}
-        <label
-          className={`p-2 rounded-lg cursor-pointer transition-colors ${
-            editor.isActive("textStyle") ? "bg-gray-200" : "hover:bg-gray-200"
-          }`}
-        >
+        {/* COLOR PICKER */}
+        <div className="relative flex items-center justify-center p-2 rounded-lg hover:bg-gray-200 transition-colors group">
           <Palette
             size={16}
             className={
@@ -168,13 +174,21 @@ export default function RichEditor({
           />
           <input
             type="color"
-            className="hidden"
             onInput={(event: any) =>
               editor.chain().focus().setColor(event.target.value).run()
             }
             value={editor.getAttributes("textStyle").color || "#000000"}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            title="Change Text Color"
           />
-        </label>
+          <div
+            className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300 pointer-events-none"
+            style={{
+              backgroundColor:
+                editor.getAttributes("textStyle").color || "transparent",
+            }}
+          />
+        </div>
 
         <div className="w-px h-5 bg-gray-300 mx-1" />
 
@@ -197,7 +211,6 @@ export default function RichEditor({
           icon={<LinkIcon size={16} />}
         />
 
-        {/* NEW: Image Button */}
         <ToolbarBtn
           onClick={addImage}
           isActive={false}
