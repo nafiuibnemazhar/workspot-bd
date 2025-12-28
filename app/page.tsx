@@ -4,11 +4,10 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Footer from "@/components/Footer";
-import { Wifi, MapPin, Zap, Wind, Star, Plus, Clock, Car } from "lucide-react"; // Added Clock, Car
+import { Wifi, MapPin, Wind, Star, Plus, Car, Navigation } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-// 1. Updated Interface to match Database
 interface Cafe {
   id: number;
   name: string;
@@ -23,28 +22,55 @@ interface Cafe {
   has_ac: boolean;
   has_parking: boolean;
   has_socket: boolean;
+  latitude: number;
+  longitude: number;
+  distance?: number;
 }
 
-// 2. Helper: Check Open Status
+// Haversine Distance Formula
+function getDistanceFromLatLonInKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) {
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) *
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function deg2rad(deg: number) {
+  return deg * (Math.PI / 180);
+}
+
 const isOpenNow = (openTime: string, closeTime: string) => {
   if (!openTime || !closeTime) return null;
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
   const [openH, openM] = openTime.split(":").map(Number);
   const [closeH, closeM] = closeTime.split(":").map(Number);
-
   const openMinutes = openH * 60 + openM;
   let closeMinutes = closeH * 60 + closeM;
-
-  if (closeMinutes < openMinutes) closeMinutes += 24 * 60; // Handle past midnight
-
+  if (closeMinutes < openMinutes) closeMinutes += 24 * 60;
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 };
 
 export default function Home() {
   const [cafes, setCafes] = useState<Cafe[]>([]);
+  const [filteredCafes, setFilteredCafes] = useState<Cafe[]>([]); // New state for filtered list
   const [loading, setLoading] = useState(true);
+
+  // FILTERS STATE
+  const [activeFilter, setActiveFilter] = useState<string>("All"); // 'All', 'Popular', 'Wifi', 'Power'
+  const [sortingByDistance, setSortingByDistance] = useState(false);
 
   useEffect(() => {
     async function fetchCafes() {
@@ -57,12 +83,85 @@ export default function Home() {
         console.error("Error fetching cafes:", error);
       } else {
         setCafes(data || []);
+        setFilteredCafes(data || []); // Initialize filtered list
       }
       setLoading(false);
     }
-
     fetchCafes();
   }, []);
+
+  // --- FILTER LOGIC ---
+  const applyFilter = (filterType: string) => {
+    // If clicking the active filter again, reset to 'All'
+    const newFilter = activeFilter === filterType ? "All" : filterType;
+    setActiveFilter(newFilter);
+
+    let result = [...cafes];
+
+    // 1. Filter by Category
+    if (newFilter === "Popular") {
+      result = result.filter((c) => c.rating >= 4.5);
+    } else if (newFilter === "Wifi") {
+      result = result.filter((c) => c.has_wifi);
+    } else if (newFilter === "Power") {
+      result = result.filter((c) => c.has_socket);
+    }
+
+    // 2. Keep distance sort if active
+    if (sortingByDistance) {
+      result.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+
+    setFilteredCafes(result);
+  };
+
+  const handleNearMe = () => {
+    setLoading(true);
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported");
+      setLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLat = position.coords.latitude;
+        const userLng = position.coords.longitude;
+
+        const cafesWithDistance = cafes.map((cafe) => {
+          if (cafe.latitude && cafe.longitude) {
+            return {
+              ...cafe,
+              distance: getDistanceFromLatLonInKm(
+                userLat,
+                userLng,
+                cafe.latitude,
+                cafe.longitude
+              ),
+            };
+          }
+          return { ...cafe, distance: 99999 };
+        });
+
+        // Update MAIN cafes list with distances
+        setCafes(cafesWithDistance);
+
+        // Apply sorting to the currently viewed list
+        const sorted = [...cafesWithDistance].sort(
+          (a, b) => (a.distance || 0) - (b.distance || 0)
+        );
+
+        setFilteredCafes(sorted);
+        setSortingByDistance(true);
+        setLoading(false);
+        setActiveFilter("All"); // Optional: Reset filters when Near Me is clicked
+      },
+      (error) => {
+        alert("Location access denied.");
+        setLoading(false);
+      }
+    );
+  };
 
   return (
     <div className="min-h-screen bg-brand-surface flex flex-col font-sans">
@@ -70,31 +169,74 @@ export default function Home() {
       <Hero />
 
       <main className="grow container mx-auto px-6 py-16 relative z-10">
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
           <div>
             <h2 className="text-3xl font-extrabold text-brand-primary mb-2">
-              Trending Spaces
+              {sortingByDistance ? "Closest to You" : "Trending Spaces"}
             </h2>
             <p className="text-brand-muted text-lg">
-              Most popular spots in Dhaka this week
+              {activeFilter !== "All"
+                ? `Showing ${
+                    activeFilter === "Power" ? "Power Backup" : activeFilter
+                  } spots`
+                : "Most popular spots in Dhaka this week"}
             </p>
           </div>
 
-          {/* Filters */}
-          <div className="hidden md:flex gap-3 mt-4 md:mt-0">
-            {["🔥 Popular", "⚡ Fast Wifi", "🔌 Power Backup"].map((filter) => (
-              <button
-                key={filter}
-                className="px-5 py-2 rounded-full bg-white border border-brand-border text-brand-primary text-sm font-bold hover:border-brand-accent hover:text-brand-accent transition-all shadow-sm"
-              >
-                {filter}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
+            {/* NEAR ME BUTTON */}
+            <button
+              onClick={handleNearMe}
+              className={`px-5 py-2.5 rounded-full border text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${
+                sortingByDistance
+                  ? "bg-brand-primary text-white border-brand-primary shadow-md ring-2 ring-offset-2 ring-brand-primary/30"
+                  : "bg-white border-brand-border text-brand-primary hover:border-brand-accent hover:text-brand-accent"
+              }`}
+            >
+              <Navigation
+                size={16}
+                className={sortingByDistance ? "animate-pulse" : ""}
+              />
+              {sortingByDistance ? "Near Me Active" : "Near Me"}
+            </button>
+
+            {/* FILTER BUTTONS */}
+            <button
+              onClick={() => applyFilter("Popular")}
+              className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
+                activeFilter === "Popular"
+                  ? "bg-brand-accent text-brand-primary border-brand-accent ring-2 ring-brand-accent/30"
+                  : "bg-white border-brand-border text-brand-primary hover:border-brand-accent hover:text-brand-accent"
+              }`}
+            >
+              🔥 Popular
+            </button>
+
+            <button
+              onClick={() => applyFilter("Wifi")}
+              className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
+                activeFilter === "Wifi"
+                  ? "bg-blue-100 text-blue-700 border-blue-200 ring-2 ring-blue-200"
+                  : "bg-white border-brand-border text-brand-primary hover:border-brand-accent hover:text-brand-accent"
+              }`}
+            >
+              ⚡ Fast Wifi
+            </button>
+
+            <button
+              onClick={() => applyFilter("Power")}
+              className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
+                activeFilter === "Power"
+                  ? "bg-green-100 text-green-700 border-green-200 ring-2 ring-green-200"
+                  : "bg-white border-brand-border text-brand-primary hover:border-brand-accent hover:text-brand-accent"
+              }`}
+            >
+              🔌 Power Backup
+            </button>
           </div>
         </div>
 
-        {/* The Grid */}
+        {/* The Grid - Now uses 'filteredCafes' */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((i) => (
@@ -104,27 +246,24 @@ export default function Home() {
               ></div>
             ))}
           </div>
-        ) : cafes.length === 0 ? (
+        ) : filteredCafes.length === 0 ? (
           <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-brand-border">
             <div className="w-16 h-16 bg-brand-accent/10 text-brand-accent rounded-full flex items-center justify-center mx-auto mb-4">
               <MapPin size={32} />
             </div>
             <h3 className="text-xl font-bold text-brand-primary">
-              No workspaces found
+              No workspaces match your filter
             </h3>
-            <p className="text-brand-muted mt-2 mb-8">
-              Be the first to list a space in Dhaka.
-            </p>
-            <Link
-              href="/add-cafe"
-              className="inline-flex items-center gap-2 bg-brand-primary text-white px-8 py-4 rounded-xl font-bold hover:bg-brand-accent transition-colors shadow-lg shadow-brand-primary/20"
+            <button
+              onClick={() => applyFilter(activeFilter)}
+              className="text-brand-accent font-bold mt-2 hover:underline"
             >
-              <Plus size={20} /> List a Space
-            </Link>
+              Clear Filters
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {cafes.map((cafe) => {
+            {filteredCafes.map((cafe) => {
               const openStatus = isOpenNow(
                 cafe.opening_time,
                 cafe.closing_time
@@ -136,7 +275,6 @@ export default function Home() {
                   key={cafe.id}
                   className="group flex flex-col gap-4 cursor-pointer"
                 >
-                  {/* Image Container */}
                   <div className="relative aspect-4/3 rounded-3xl overflow-hidden bg-gray-100 shadow-sm border border-brand-border/50">
                     {cafe.cover_image ? (
                       <img
@@ -150,7 +288,6 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Open/Closed Badge (New) */}
                     {openStatus !== null && (
                       <div
                         className={`absolute top-4 left-4 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-[10px] font-bold shadow-sm uppercase tracking-wide ${
@@ -161,14 +298,19 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Floating Price Pill */}
+                    {cafe.distance !== undefined && cafe.distance < 9000 && (
+                      <div className="absolute bottom-4 right-4 bg-brand-primary/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1">
+                        <Navigation size={10} />
+                        {cafe.distance.toFixed(1)} km
+                      </div>
+                    )}
+
                     {cafe.avg_price && (
                       <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold text-brand-primary shadow-sm border border-white/20">
                         ৳ {cafe.avg_price}
                       </div>
                     )}
 
-                    {/* Generator/Parking Badge (Updated Logic) */}
                     {cafe.has_parking && (
                       <div className="absolute bottom-4 left-4 bg-emerald-500/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-[10px] font-bold shadow-sm flex items-center gap-1.5">
                         <Car size={10} fill="currentColor" /> PARKING
@@ -176,14 +318,12 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* Content */}
                   <div className="px-1">
                     <div className="flex justify-between items-start mb-1">
                       <h3 className="text-xl font-bold text-brand-primary leading-tight group-hover:text-brand-accent transition-colors">
                         {cafe.name}
                       </h3>
 
-                      {/* Rating Badge (Dynamic) */}
                       <div className="flex items-center gap-1 text-sm font-bold text-brand-primary bg-brand-surface px-2 py-0.5 rounded-md border border-brand-border">
                         <Star
                           size={12}
@@ -200,7 +340,6 @@ export default function Home() {
                       </span>
                     </p>
 
-                    {/* Amenities Icons (Dynamic) */}
                     <div className="flex items-center gap-3 pt-3 border-t border-brand-border/50">
                       {cafe.has_wifi && (
                         <span className="flex items-center gap-1.5 text-xs font-semibold text-brand-muted">
@@ -218,7 +357,6 @@ export default function Home() {
                           AC
                         </span>
                       )}
-                      {/* Fallback if no amenities */}
                       {!cafe.has_wifi && !cafe.has_ac && (
                         <span className="text-xs text-gray-300 italic">
                           No amenities listed

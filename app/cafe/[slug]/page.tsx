@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import dynamic from "next/dynamic";
 import StarRating from "@/components/StarRating";
+import ReviewSection from "@/components/ReviewSection";
 import {
   Wifi,
   Wind,
@@ -30,13 +31,11 @@ import {
 import Link from "next/link";
 import DOMPurify from "dompurify";
 
-// Dynamic Map Import
 const ViewMap = dynamic(() => import("@/components/ViewMap"), {
   ssr: false,
   loading: () => <div className="h-64 bg-gray-100 animate-pulse rounded-2xl" />,
 });
 
-// Helper: Format Time (14:00 -> 2:00 PM)
 function formatTime(timeStr: string) {
   if (!timeStr) return "";
   const [hours, minutes] = timeStr.split(":");
@@ -46,21 +45,15 @@ function formatTime(timeStr: string) {
   return `${h12}:${minutes} ${ampm}`;
 }
 
-// NEW HELPER: Check if Open (Same as Home Page)
 const isOpenNow = (openTime: string, closeTime: string) => {
   if (!openTime || !closeTime) return null;
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
   const [openH, openM] = openTime.split(":").map(Number);
   const [closeH, closeM] = closeTime.split(":").map(Number);
-
   const openMinutes = openH * 60 + openM;
   let closeMinutes = closeH * 60 + closeM;
-
-  // Handle closing after midnight (e.g., 2 AM)
   if (closeMinutes < openMinutes) closeMinutes += 24 * 60;
-
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 };
 
@@ -164,10 +157,10 @@ export default function CafeDetails() {
   const handleGetDirections = () => {
     if (!cafe) return;
     if (cafe.latitude && cafe.longitude) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
+      const url = `http://googleusercontent.com/maps.google.com/?q=${cafe.latitude},${cafe.longitude}`;
       window.open(url, "_blank");
     } else {
-      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      const url = `http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(
         cafe.name + " " + (cafe.location || "")
       )}`;
       window.open(url, "_blank");
@@ -200,8 +193,6 @@ export default function CafeDetails() {
     currentUser &&
     (currentUser.email === "your-email@gmail.com" ||
       currentUser.id === cafe.owner_id);
-
-  // CALCULATE OPEN STATUS
   const openStatus = isOpenNow(cafe.opening_time, cafe.closing_time);
 
   return (
@@ -293,7 +284,7 @@ export default function CafeDetails() {
               />
             </div>
 
-            <div className="bg-white rounded-3xl p-8 shadow-sm border border-brand-border">
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-brand-border mb-8">
               <h3 className="text-xl font-bold text-brand-primary mb-6">
                 Amenities
               </h3>
@@ -320,13 +311,14 @@ export default function CafeDetails() {
                 />
               </div>
             </div>
+
+            <ReviewSection cafeId={cafe.id} />
           </div>
 
           {/* Right Column */}
           <div className="lg:col-span-1">
             <div className="sticky top-28 space-y-6">
               <div className="bg-white rounded-3xl p-6 shadow-xl border border-brand-border">
-                {/* STATUS & TIME (FIXED LOGIC) */}
                 <div className="flex justify-between items-center mb-6">
                   <span className="text-brand-muted font-medium">Status</span>
                   <span
@@ -349,11 +341,20 @@ export default function CafeDetails() {
                         : "Hours not added"}
                     </span>
                   </div>
+
+                  {/* UPDATED PHONE SECTION - CLICKABLE */}
                   {cafe.contact_number && (
-                    <div className="flex items-center gap-3 text-brand-muted">
-                      <Phone size={18} />
-                      <span>{cafe.contact_number}</span>
-                    </div>
+                    <a
+                      href={`tel:${cafe.contact_number}`}
+                      className="flex items-center gap-3 text-brand-muted hover:text-brand-primary transition-colors group cursor-pointer"
+                    >
+                      <div className="p-2 bg-gray-50 rounded-full group-hover:bg-brand-primary/10 transition-colors">
+                        <Phone size={18} />
+                      </div>
+                      <span className="font-bold group-hover:underline">
+                        {cafe.contact_number}
+                      </span>
+                    </a>
                   )}
                 </div>
 

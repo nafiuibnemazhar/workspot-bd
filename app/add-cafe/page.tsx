@@ -19,6 +19,7 @@ import {
   Globe,
   Facebook,
   Instagram,
+  Phone, // Added Phone Icon
 } from "lucide-react";
 import Link from "next/link";
 
@@ -36,6 +37,7 @@ export default function AddCafePage() {
     description: "",
     location: "",
     google_map: "",
+    contact_number: "", // NEW FIELD
     latitude: "",
     longitude: "",
     cover_image: "",
@@ -51,32 +53,24 @@ export default function AddCafePage() {
     avg_price: 0,
   });
 
-  // 1. IMAGE UPLOAD LOGIC
+  // ... (Keep handleImageUpload logic same as before) ...
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-
     const file = e.target.files[0];
     setUploading(true);
-
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `covers/${fileName}`;
-
-      // Upload to 'cafes' bucket
       const { error: uploadError } = await supabase.storage
         .from("cafes")
         .upload(filePath, file);
-
       if (uploadError) throw uploadError;
-
-      // Get Public URL
       const { data } = supabase.storage.from("cafes").getPublicUrl(filePath);
-
       setFormData({ ...formData, cover_image: data.publicUrl });
       setPreview(data.publicUrl);
     } catch (error: any) {
-      alert("Error uploading image: " + error.message);
+      alert("Error: " + error.message);
     } finally {
       setUploading(false);
     }
@@ -87,7 +81,6 @@ export default function AddCafePage() {
       alert("Please fill in at least the Name and Location.");
       return;
     }
-
     setSubmitting(true);
 
     const finalSlug =
@@ -103,6 +96,7 @@ export default function AddCafePage() {
         description: formData.description,
         location: formData.location,
         google_map: formData.google_map,
+        contact_number: formData.contact_number, // SEND TO DB
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
         cover_image: formData.cover_image,
@@ -134,7 +128,7 @@ export default function AddCafePage() {
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-6 pt-28">
-        {/* HEADER ACTION BAR */}
+        {/* Header */}
         <div className="flex justify-between items-center mb-8 sticky top-24 z-20 bg-gray-50/90 backdrop-blur-sm py-4">
           <div className="flex items-center gap-4">
             <Link
@@ -162,30 +156,29 @@ export default function AddCafePage() {
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="bg-brand-primary text-white px-8 py-2.5 rounded-xl font-bold hover:bg-brand-accent transition-all flex items-center gap-2 shadow-lg shadow-brand-primary/20 disabled:opacity-50 cursor-pointer active:scale-95"
+              className="bg-brand-primary text-white px-8 py-2.5 rounded-xl font-bold hover:bg-brand-accent transition-all flex items-center gap-2 shadow-lg shadow-brand-primary/20 disabled:opacity-50"
             >
               {submitting ? (
                 <Loader2 className="animate-spin" size={18} />
               ) : (
                 <Plus size={18} />
               )}{" "}
-              Publish Listing
+              Publish
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* --- LEFT COLUMN: MAIN CONTENT --- */}
+          {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-8">
-            {/* 1. ESSENTIALS */}
+            {/* 1. Basic Info */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm">
                   01
-                </span>
+                </span>{" "}
                 Basic Information
               </h3>
-
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -197,39 +190,35 @@ export default function AddCafePage() {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 focus:border-brand-accent outline-none transition-all font-bold text-lg text-gray-900 placeholder-gray-400"
-                    placeholder="e.g. North End Coffee Roasters"
+                    className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none font-bold text-lg"
+                    placeholder="e.g. North End Coffee"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Description
                   </label>
-                  <div className="prose-editor-wrapper">
-                    <RichEditor
-                      value={formData.description}
-                      onChange={(val) =>
-                        setFormData({ ...formData, description: val })
-                      }
-                    />
-                  </div>
+                  <RichEditor
+                    value={formData.description}
+                    onChange={(val) =>
+                      setFormData({ ...formData, description: val })
+                    }
+                  />
                 </div>
               </div>
             </div>
 
-            {/* 2. MEDIA UPLOAD */}
+            {/* 2. Cover Image */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm">
                   02
-                </span>
+                </span>{" "}
                 Cover Image
               </h3>
-
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className={`relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-brand-accent hover:bg-brand-accent/5 group ${
+                className={`relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent hover:bg-brand-accent/5 transition-all ${
                   preview
                     ? "border-brand-accent bg-brand-accent/5"
                     : "border-gray-200"
@@ -242,72 +231,53 @@ export default function AddCafePage() {
                   className="hidden"
                   accept="image/*"
                 />
-
                 {uploading ? (
                   <div className="flex flex-col items-center gap-2 text-brand-accent">
                     <Loader2 className="animate-spin" size={32} />
                     <span className="font-bold">Uploading...</span>
                   </div>
                 ) : preview ? (
-                  <div className="w-full relative group">
-                    <img
-                      src={preview}
-                      alt="Preview"
-                      className="w-full h-64 object-cover rounded-xl shadow-md"
-                    />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
-                      <p className="text-white font-bold flex items-center gap-2">
-                        <ImageIcon /> Change Image
-                      </p>
-                    </div>
-                  </div>
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className="w-full h-64 object-cover rounded-xl shadow-md"
+                  />
                 ) : (
                   <div className="text-center space-y-2">
-                    <div className="w-16 h-16 bg-blue-50 text-brand-accent rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                    <div className="w-16 h-16 bg-blue-50 text-brand-accent rounded-full flex items-center justify-center mx-auto mb-2">
                       <UploadCloud size={32} />
                     </div>
                     <h4 className="text-gray-900 font-bold">
                       Click to upload image
                     </h4>
-                    <p className="text-gray-400 text-sm">
-                      SVG, PNG, JPG or GIF (max. 5MB)
-                    </p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* 3. LOCATION */}
+            {/* 3. Location */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-sm">
                   03
-                </span>
-                Location Details
+                </span>{" "}
+                Location
               </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Short Address
                   </label>
-                  <div className="relative">
-                    <MapPin
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                      size={18}
-                    />
-                    <input
-                      type="text"
-                      value={formData.location}
-                      onChange={(e) =>
-                        setFormData({ ...formData, location: e.target.value })
-                      }
-                      className="w-full pl-12 p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none"
-                      placeholder="e.g. Banani, Road 11"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) =>
+                      setFormData({ ...formData, location: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                    placeholder="e.g. Banani, Road 11"
+                  />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Latitude
@@ -319,7 +289,7 @@ export default function AddCafePage() {
                     onChange={(e) =>
                       setFormData({ ...formData, latitude: e.target.value })
                     }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none font-mono text-sm"
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
                     placeholder="23.7937"
                   />
                 </div>
@@ -334,7 +304,7 @@ export default function AddCafePage() {
                     onChange={(e) =>
                       setFormData({ ...formData, longitude: e.target.value })
                     }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none font-mono text-sm"
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
                     placeholder="90.4066"
                   />
                 </div>
@@ -348,17 +318,17 @@ export default function AddCafePage() {
                     onChange={(e) =>
                       setFormData({ ...formData, google_map: e.target.value })
                     }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-brand-accent/20 outline-none text-sm text-blue-600"
-                    placeholder="https://maps.google.com/..."
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none text-sm text-blue-600"
+                    placeholder="https://maps.google.com..."
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* --- RIGHT COLUMN: SIDEBAR --- */}
+          {/* RIGHT COLUMN */}
           <div className="space-y-6">
-            {/* 4. OPERATIONS */}
+            {/* 4. Operations */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Clock size={18} className="text-gray-400" /> Operational
@@ -391,7 +361,6 @@ export default function AddCafePage() {
                   />
                 </div>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 mb-1 block">
@@ -412,7 +381,6 @@ export default function AddCafePage() {
                         })
                       }
                       className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
-                      placeholder="400"
                     />
                   </div>
                 </div>
@@ -437,16 +405,15 @@ export default function AddCafePage() {
                         })
                       }
                       className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-bold"
-                      placeholder="4.5"
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 5. AMENITIES */}
+            {/* 5. Amenities */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="text-md font-bold text-gray-900 mb-4">
                 Amenities
               </h3>
               <div className="space-y-1">
@@ -473,12 +440,32 @@ export default function AddCafePage() {
               </div>
             </div>
 
-            {/* 6. SOCIALS & SEO */}
+            {/* 6. Social & Contact (UPDATED) */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <h3 className="text-md font-bold text-gray-900 mb-4 flex items-center gap-2">
-                Social & Meta
+              <h3 className="text-md font-bold text-gray-900 mb-4">
+                Contact & Social
               </h3>
               <div className="space-y-3">
+                {/* NEW PHONE FIELD */}
+                <div className="relative">
+                  <Phone
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    value={formData.contact_number}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        contact_number: e.target.value,
+                      })
+                    }
+                    className="w-full pl-9 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs font-bold"
+                    placeholder="01712-345678"
+                  />
+                </div>
+
                 <div className="relative">
                   <Instagram
                     size={16}
