@@ -14,15 +14,18 @@ import {
   Star,
   Filter,
   X,
-  SlidersHorizontal,
-  ChevronDown,
+  Car, // Added Car icon
   Power,
 } from "lucide-react";
 
 export default function SearchPage() {
   return (
     <Suspense
-      fallback={<div className="p-10 text-center">Loading Search...</div>}
+      fallback={
+        <div className="p-10 text-center text-brand-primary">
+          Loading Search...
+        </div>
+      }
     >
       <SearchContent />
     </Suspense>
@@ -37,46 +40,42 @@ function SearchContent() {
   const [loading, setLoading] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  // Advanced State
+  // 1. STATE MATCHING REAL DB SCHEMA
   const [query, setQuery] = useState(searchParams.get("q") || "");
-  const [sort, setSort] = useState("newest"); // 'newest', 'price_asc', 'price_desc'
+  const [sort, setSort] = useState("newest");
   const [filters, setFilters] = useState({
-    wifi: searchParams.get("wifi") === "true",
-    generator: searchParams.get("generator") === "true",
-    ac: searchParams.get("ac") === "true",
-    outlets: searchParams.get("outlets") === "true",
-    price: "all", // 'all', 'budget' (<300), 'mid' (300-600), 'premium' (>600)
+    has_wifi: searchParams.get("wifi") === "true",
+    has_ac: searchParams.get("ac") === "true",
+    has_parking: searchParams.get("parking") === "true",
+    has_socket: searchParams.get("socket") === "true",
+    price: searchParams.get("price") || "all",
   });
 
-  // Fetch Logic
+  // 2. FETCH LOGIC
   useEffect(() => {
     async function fetchResults() {
       setLoading(true);
 
       let dbQuery = supabase.from("cafes").select("*");
 
-      // 1. Text Search
+      // A. Text Search (Name OR Location)
       if (query) {
-        dbQuery = dbQuery.or(
-          `name.ilike.%${query}%,address_text.ilike.%${query}%`
-        );
+        dbQuery = dbQuery.or(`name.ilike.%${query}%,location.ilike.%${query}%`);
       }
 
-      // 2. JSON Filters
-      if (filters.wifi) dbQuery = dbQuery.contains("amenities", { wifi: true });
-      if (filters.generator)
-        dbQuery = dbQuery.contains("amenities", { generator: true });
-      if (filters.ac) dbQuery = dbQuery.contains("amenities", { ac: true });
-      if (filters.outlets)
-        dbQuery = dbQuery.contains("amenities", { outlets: true });
+      // B. Boolean Filters (Real Columns)
+      if (filters.has_wifi) dbQuery = dbQuery.eq("has_wifi", true);
+      if (filters.has_ac) dbQuery = dbQuery.eq("has_ac", true);
+      if (filters.has_parking) dbQuery = dbQuery.eq("has_parking", true);
+      if (filters.has_socket) dbQuery = dbQuery.eq("has_socket", true);
 
-      // 3. Price Filter (Manual logic usually, but here is basic DB logic)
+      // C. Price Filter
       if (filters.price === "budget") dbQuery = dbQuery.lt("avg_price", 300);
       if (filters.price === "mid")
         dbQuery = dbQuery.gte("avg_price", 300).lte("avg_price", 600);
       if (filters.price === "premium") dbQuery = dbQuery.gt("avg_price", 600);
 
-      // 4. Sorting
+      // D. Sorting
       if (sort === "newest")
         dbQuery = dbQuery.order("created_at", { ascending: false });
       if (sort === "price_asc")
@@ -86,37 +85,62 @@ function SearchContent() {
 
       const { data, error } = await dbQuery;
 
-      if (error) console.error(error);
+      if (error) console.error("Search Error:", error);
       else setCafes(data || []);
 
       setLoading(false);
     }
 
+    // Debounce to prevent too many requests while typing
     const timer = setTimeout(() => fetchResults(), 400);
     return () => clearTimeout(timer);
   }, [query, filters, sort]);
 
-  // URL Sync Helper
+  // 3. UPDATE URL & STATE
   const updateFilter = (key: string, value: any) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-    // In a real app, you'd update URL params here too
+    const newFilters = { ...filters, [key]: value };
+    setFilters(newFilters);
+
+    // Update URL Params for shareability
+    const params = new URLSearchParams(searchParams.toString());
+
+    // Handle Boolean Filters
+    if (key === "has_wifi")
+      value ? params.set("wifi", "true") : params.delete("wifi");
+    if (key === "has_ac")
+      value ? params.set("ac", "true") : params.delete("ac");
+    if (key === "has_parking")
+      value ? params.set("parking", "true") : params.delete("parking");
+    if (key === "has_socket")
+      value ? params.set("socket", "true") : params.delete("socket");
+
+    // Handle Price
+    if (key === "price")
+      value !== "all" ? params.set("price", value) : params.delete("price");
+
+    // Handle Query
+    if (key === "q") value ? params.set("q", value) : params.delete("q");
+
+    router.replace(`?${params.toString()}`, { scroll: false });
   };
 
   return (
     <div className="min-h-screen bg-brand-surface font-sans pb-20">
       <Navbar />
 
-      {/* 1. COMPACT HEADER */}
+      {/* HEADER & SEARCH BAR */}
       <div className="bg-brand-primary pt-28 pb-8 px-6 sticky top-0 z-20 shadow-xl">
         <div className="container mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row gap-4 items-center">
-            {/* Search Input */}
             <div className="relative flex-1 w-full">
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search area or cafe..."
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  updateFilter("q", e.target.value);
+                }}
+                placeholder="Search area (e.g. Banani) or cafe name..."
                 className="w-full p-3 pl-10 rounded-xl border-none focus:ring-2 focus:ring-brand-accent bg-white/10 text-white placeholder:text-brand-muted font-medium"
               />
               <Search
@@ -124,8 +148,6 @@ function SearchContent() {
                 size={18}
               />
             </div>
-
-            {/* Mobile Filter Toggle */}
             <button
               onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
               className="md:hidden w-full bg-white/10 text-white p-3 rounded-xl font-bold flex items-center justify-center gap-2"
@@ -137,7 +159,7 @@ function SearchContent() {
       </div>
 
       <div className="container mx-auto px-6 py-8 max-w-6xl grid grid-cols-1 md:grid-cols-4 gap-8">
-        {/* 2. SIDEBAR FILTERS (Desktop) */}
+        {/* SIDEBAR FILTERS */}
         <div
           className={`md:block ${
             mobileFiltersOpen ? "block" : "hidden"
@@ -173,57 +195,59 @@ function SearchContent() {
             </div>
           </div>
 
-          {/* Amenities Filter */}
+          {/* Amenities Filter (REAL COLUMNS) */}
           <div className="bg-white p-5 rounded-2xl border border-brand-border shadow-sm">
             <h3 className="font-bold text-brand-primary mb-4">Amenities</h3>
             <div className="space-y-3">
               <Checkbox
                 label="Fast Wifi"
                 icon={<Wifi size={16} />}
-                checked={filters.wifi}
-                onChange={() => updateFilter("wifi", !filters.wifi)}
-              />
-              <Checkbox
-                label="Generator"
-                icon={<Zap size={16} />}
-                checked={filters.generator}
-                onChange={() => updateFilter("generator", !filters.generator)}
+                checked={filters.has_wifi}
+                onChange={() => updateFilter("has_wifi", !filters.has_wifi)}
               />
               <Checkbox
                 label="Air Con"
                 icon={<Wind size={16} />}
-                checked={filters.ac}
-                onChange={() => updateFilter("ac", !filters.ac)}
+                checked={filters.has_ac}
+                onChange={() => updateFilter("has_ac", !filters.has_ac)}
+              />
+              <Checkbox
+                label="Parking"
+                icon={<Car size={16} />}
+                checked={filters.has_parking}
+                onChange={() =>
+                  updateFilter("has_parking", !filters.has_parking)
+                }
               />
               <Checkbox
                 label="Power Outlets"
                 icon={<Power size={16} />}
-                checked={filters.outlets}
-                onChange={() => updateFilter("outlets", !filters.outlets)}
+                checked={filters.has_socket}
+                onChange={() => updateFilter("has_socket", !filters.has_socket)}
               />
             </div>
           </div>
 
-          {/* Clear Button */}
           <button
-            onClick={() =>
+            onClick={() => {
               setFilters({
-                wifi: false,
-                generator: false,
-                ac: false,
-                outlets: false,
+                has_wifi: false,
+                has_ac: false,
+                has_parking: false,
+                has_socket: false,
                 price: "all",
-              })
-            }
+              });
+              setQuery("");
+              router.replace("/search"); // Clear URL
+            }}
             className="w-full py-2 text-sm font-bold text-gray-400 hover:text-brand-primary transition-colors"
           >
             Reset Filters
           </button>
         </div>
 
-        {/* 3. RESULTS COLUMN */}
+        {/* RESULTS GRID */}
         <div className="md:col-span-3">
-          {/* Results Header */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-brand-primary">
               {loading ? "Searching..." : `${cafes.length} places found`}
@@ -244,7 +268,6 @@ function SearchContent() {
             </div>
           </div>
 
-          {/* Cards Grid */}
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
               {[1, 2, 3, 4].map((i) => (
@@ -274,50 +297,51 @@ function SearchContent() {
                   key={cafe.id}
                   className="group bg-white rounded-3xl p-4 border border-brand-border hover:shadow-xl transition-all hover:-translate-y-1 block"
                 >
-                  {/* Card Image */}
                   <div className="relative h-48 rounded-2xl overflow-hidden mb-4 bg-gray-100">
                     {cafe.cover_image ? (
                       <img
                         src={cafe.cover_image}
+                        alt={cafe.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gray-200" />
+                      <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">
+                        No Image
+                      </div>
                     )}
 
                     <div className="absolute top-3 right-3 bg-white/95 px-3 py-1 rounded-full text-xs font-bold text-brand-primary shadow-sm border border-gray-100">
                       ৳ {cafe.avg_price}
                     </div>
 
-                    {cafe.amenities?.wifi && (
+                    {cafe.has_wifi && (
                       <div className="absolute bottom-3 left-3 bg-brand-primary/90 p-1.5 rounded-lg text-white backdrop-blur-md">
                         <Wifi size={14} />
                       </div>
                     )}
                   </div>
 
-                  {/* Card Details */}
                   <div className="flex justify-between items-start mb-1">
                     <h3 className="font-bold text-lg text-brand-primary truncate pr-2">
                       {cafe.name}
                     </h3>
                     <div className="flex items-center gap-1 text-xs font-bold bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-                      <Star size={10} fill="currentColor" /> 4.9
+                      <Star size={10} fill="currentColor" />{" "}
+                      {cafe.rating || "New"}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1 text-sm text-brand-muted mb-4">
                     <MapPin size={14} className="text-brand-accent" />{" "}
-                    {cafe.address_text}
+                    {cafe.location}
                   </div>
 
-                  {/* Mini Tags */}
+                  {/* Real DB Columns for Tags */}
                   <div className="flex flex-wrap gap-2">
-                    {cafe.amenities?.generator && (
-                      <AmenityTag label="Generator" />
-                    )}
-                    {cafe.amenities?.ac && <AmenityTag label="AC" />}
-                    {cafe.amenities?.outlets && <AmenityTag label="Power" />}
+                    {cafe.has_wifi && <AmenityTag label="Wifi" />}
+                    {cafe.has_ac && <AmenityTag label="AC" />}
+                    {cafe.has_parking && <AmenityTag label="Parking" />}
+                    {cafe.has_socket && <AmenityTag label="Power" />}
                   </div>
                 </Link>
               ))}
@@ -329,7 +353,6 @@ function SearchContent() {
   );
 }
 
-// Sub-components for cleaner code
 function Checkbox({ label, checked, onChange, icon }: any) {
   return (
     <label className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded-lg transition-colors -ml-2">
