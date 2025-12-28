@@ -156,15 +156,21 @@ export default function CafeDetails() {
 
   const handleGetDirections = () => {
     if (!cafe) return;
+
+    let url = "";
+
     if (cafe.latitude && cafe.longitude) {
-      const url = `http://googleusercontent.com/maps.google.com/?q=${cafe.latitude},${cafe.longitude}`;
-      window.open(url, "_blank");
+      // Option A: Precise Navigation (Lat/Long)
+      // "dir/?api=1" triggers the Route Finder
+      // "destination" sets the target. Google automatically assumes "origin = My Location"
+      url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
     } else {
-      const url = `http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(
-        cafe.name + " " + (cafe.location || "")
-      )}`;
-      window.open(url, "_blank");
+      // Option B: Search Navigation (Name + Address)
+      const query = encodeURIComponent(`${cafe.name} ${cafe.location || ""}`);
+      url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
     }
+
+    window.open(url, "_blank");
   };
 
   if (loading)
