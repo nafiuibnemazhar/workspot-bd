@@ -191,7 +191,7 @@ export default function CafeDetails() {
 
   const isOwner =
     currentUser &&
-    (currentUser.email === "your-email@gmail.com" ||
+    (currentUser.email === "admin@example.com" ||
       currentUser.id === cafe.owner_id);
   const openStatus = isOpenNow(cafe.opening_time, cafe.closing_time);
 

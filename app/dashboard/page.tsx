@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@apollo/client/react";
-import { GET_DASHBOARD_CAFES } from "@/lib/queries"; // Updated import
+// Updated import
 import Navbar from "@/components/Navbar";
 import { Plus, Coffee, Loader2, LogOut, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";

@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Star, User, Loader2, Send, Trash2, Edit2, X } from "lucide-react";
+import {
+  Star,
+  User,
+  Loader2,
+  Send,
+  Trash2,
+  Edit2,
+  X,
+  CheckCircle,
+} from "lucide-react";
 
 export default function ReviewSection({ cafeId }: { cafeId: number }) {
   const [reviews, setReviews] = useState<any[]>([]);
@@ -41,7 +50,10 @@ export default function ReviewSection({ cafeId }: { cafeId: number }) {
     setLoading(false);
   }
 
-  // --- ACTIONS ---
+  // Check if current user has already reviewed
+  const userReview = user ? reviews.find((r) => r.user_id === user.id) : null;
+  // Show form ONLY if: (User hasn't reviewed yet) OR (User is currently editing)
+  const showForm = !userReview || editingId !== null;
 
   const handleDelete = async (reviewId: number) => {
     if (!confirm("Are you sure you want to delete this review?")) return;
@@ -54,7 +66,6 @@ export default function ReviewSection({ cafeId }: { cafeId: number }) {
       alert("Error deleting: " + error.message);
     } else {
       fetchReviews();
-      // If we were editing this review, clear the form
       if (editingId === reviewId) resetForm();
     }
   };
@@ -65,9 +76,11 @@ export default function ReviewSection({ cafeId }: { cafeId: number }) {
     setComment(review.comment);
     setUserName(review.user_name || "");
     // Scroll to form
-    document
-      .getElementById("review-form")
-      ?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      document
+        .getElementById("review-form")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   };
 
   const resetForm = () => {
@@ -85,41 +98,46 @@ export default function ReviewSection({ cafeId }: { cafeId: number }) {
 
     setSubmitting(true);
 
-    if (editingId) {
-      // UPDATE EXISTING REVIEW
-      const { error } = await supabase
-        .from("reviews")
-        .update({
-          rating: rating,
-          comment: comment,
-          user_name: userName || "Verified User",
-        })
-        .eq("id", editingId); // Ensure we only update the specific review
+    try {
+      if (editingId) {
+        // UPDATE EXISTING REVIEW
+        const { error } = await supabase
+          .from("reviews")
+          .update({
+            rating: rating,
+            comment: comment,
+            user_name: userName || "Verified User",
+          })
+          .eq("id", editingId);
 
-      if (error) alert("Error updating: " + error.message);
-      else {
-        resetForm();
-        fetchReviews();
-      }
-    } else {
-      // CREATE NEW REVIEW
-      const { error } = await supabase.from("reviews").insert([
-        {
-          cafe_id: cafeId,
-          user_id: user.id,
-          user_name: userName || "Verified User",
-          rating: rating,
-          comment,
-        },
-      ]);
+        if (error) throw error;
+      } else {
+        // CREATE NEW REVIEW
+        const { error } = await supabase.from("reviews").insert([
+          {
+            cafe_id: cafeId,
+            user_id: user.id,
+            user_name: userName || "Verified User",
+            rating: rating,
+            comment,
+          },
+        ]);
 
-      if (error) alert("Error submitting: " + error.message);
-      else {
-        resetForm();
-        fetchReviews();
+        if (error) throw error;
       }
+
+      resetForm();
+      fetchReviews();
+    } catch (error: any) {
+      // Catch the unique constraint error
+      if (error.code === "23505") {
+        alert("You have already reviewed this workspace!");
+      } else {
+        alert("Error: " + error.message);
+      }
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (
@@ -221,115 +239,137 @@ export default function ReviewSection({ cafeId }: { cafeId: number }) {
         )}
       </div>
 
-      {/* WRITE / EDIT FORM */}
-      <div
-        id="review-form"
-        className={`bg-gray-50 p-6 rounded-2xl border border-gray-200 transition-all ${
-          editingId ? "ring-2 ring-brand-accent shadow-lg bg-white" : ""
-        }`}
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h4 className="font-bold text-brand-primary">
-            {editingId ? "Edit your Review" : "Write a Review"}
-          </h4>
-          {editingId && (
-            <button
-              onClick={resetForm}
-              className="text-xs font-bold text-gray-500 hover:text-red-500 flex items-center gap-1"
-            >
-              <X size={14} /> Cancel Edit
-            </button>
+      {/* FORM AREA */}
+      {showForm ? (
+        <div
+          id="review-form"
+          className={`bg-gray-50 p-6 rounded-2xl border border-gray-200 transition-all ${
+            editingId ? "ring-2 ring-brand-accent shadow-lg bg-white" : ""
+          }`}
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold text-brand-primary">
+              {editingId ? "Edit your Review" : "Write a Review"}
+            </h4>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                className="text-xs font-bold text-gray-500 hover:text-red-500 flex items-center gap-1"
+              >
+                <X size={14} /> Cancel Edit
+              </button>
+            )}
+          </div>
+
+          {user ? (
+            <div className="space-y-4">
+              {/* RATING INPUTS */}
+              <div className="flex flex-wrap items-center gap-4 mb-2">
+                <span className="text-sm font-bold text-gray-600">Rating:</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRating(star)}
+                      className={`transition-transform hover:scale-110 ${
+                        Number(rating) >= star
+                          ? "text-yellow-500 fill-yellow-500"
+                          : "text-gray-300"
+                      }`}
+                    >
+                      <Star
+                        size={24}
+                        className={
+                          Number(rating) >= star ? "fill-yellow-500" : ""
+                        }
+                      />
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  max="5"
+                  min="1"
+                  value={rating}
+                  onChange={(e) => setRating(parseFloat(e.target.value))}
+                  className="w-16 p-1.5 text-center text-sm font-bold rounded-lg border border-gray-300 focus:border-brand-accent outline-none"
+                  placeholder="4.5"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="Your Name (Optional)"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-accent outline-none"
+                />
+              </div>
+
+              <textarea
+                placeholder="Share your experience..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-accent outline-none min-h-[100px]"
+              />
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className={`text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                    editingId ? "bg-brand-accent" : "bg-brand-primary"
+                  }`}
+                >
+                  {submitting ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : editingId ? (
+                    <Edit2 size={16} />
+                  ) : (
+                    <Send size={16} />
+                  )}
+                  {editingId ? "Update Review" : "Post Review"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-gray-500 text-sm mb-3">
+                Please login to write a review
+              </p>
+              <a
+                href="/login"
+                className="text-brand-accent font-bold hover:underline"
+              >
+                Login Now
+              </a>
+            </div>
           )}
         </div>
-
-        {user ? (
-          <div className="space-y-4">
-            {/* RATING INPUTS */}
-            <div className="flex flex-wrap items-center gap-4 mb-2">
-              <span className="text-sm font-bold text-gray-600">Rating:</span>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setRating(star)}
-                    className={`transition-transform hover:scale-110 ${
-                      Number(rating) >= star
-                        ? "text-yellow-500 fill-yellow-500"
-                        : "text-gray-300"
-                    }`}
-                  >
-                    <Star
-                      size={24}
-                      className={
-                        Number(rating) >= star ? "fill-yellow-500" : ""
-                      }
-                    />
-                  </button>
-                ))}
-              </div>
-              {/* Manual Decimal Input */}
-              <input
-                type="number"
-                step="0.1"
-                max="5"
-                min="1"
-                value={rating}
-                onChange={(e) => setRating(parseFloat(e.target.value))}
-                className="w-16 p-1.5 text-center text-sm font-bold rounded-lg border border-gray-300 focus:border-brand-accent outline-none"
-                placeholder="4.5"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Your Name (Optional)"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-                className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-accent outline-none"
-              />
-            </div>
-
-            <textarea
-              placeholder="Share your experience..."
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-brand-accent outline-none min-h-[100px]"
-            />
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className={`text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-colors flex items-center gap-2 disabled:opacity-50 ${
-                  editingId ? "bg-brand-accent" : "bg-brand-primary"
-                }`}
-              >
-                {submitting ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : editingId ? (
-                  <Edit2 size={16} />
-                ) : (
-                  <Send size={16} />
-                )}
-                {editingId ? "Update Review" : "Post Review"}
-              </button>
+      ) : (
+        /* "ALREADY REVIEWED" BANNER */
+        <div className="bg-brand-accent/5 border border-brand-accent/20 p-6 rounded-2xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="text-brand-accent" size={24} />
+            <div>
+              <h4 className="font-bold text-brand-primary">
+                You have reviewed this space
+              </h4>
+              <p className="text-sm text-gray-500">
+                Thank you for sharing your experience!
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="text-center py-4">
-            <p className="text-gray-500 text-sm mb-3">
-              Please login to write a review
-            </p>
-            <a
-              href="/login"
-              className="text-brand-accent font-bold hover:underline"
-            >
-              Login Now
-            </a>
-          </div>
-        )}
-      </div>
+          <button
+            onClick={() => handleEditClick(userReview)}
+            className="text-sm font-bold text-brand-accent hover:underline flex items-center gap-1"
+          >
+            <Edit2 size={14} /> Edit Review
+          </button>
+        </div>
+      )}
     </div>
   );
 }
