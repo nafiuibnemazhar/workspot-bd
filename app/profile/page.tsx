@@ -170,7 +170,7 @@ export default function ProfilePage() {
 
       {/* HEADER BANNER */}
       <div className="h-48 bg-brand-primary relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-brand-primary to-blue-900 opacity-50"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-brand-primary to-blue-900 opacity-50"></div>
       </div>
 
       <div className="container mx-auto px-6 max-w-5xl -mt-20 relative z-10">

@@ -383,7 +383,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* CHART 2: RECENT ACTIVITY */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm lg:col-span-1 h-[400px] overflow-hidden flex flex-col">
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm lg:col-span-1 h-100 overflow-hidden flex flex-col">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <Activity size={18} className="text-slate-400" /> Live Feed
                 </h3>
@@ -394,7 +394,7 @@ export default function AdminDashboard() {
                       className="flex gap-3 pb-3 border-b border-slate-50 last:border-0 items-start"
                     >
                       <div
-                        className={`mt-1.5 min-w-[8px] h-2 rounded-full ${
+                        className={`mt-1.5 min-w-2 h-2 rounded-full ${
                           item.type === "review"
                             ? "bg-purple-500"
                             : "bg-blue-500"

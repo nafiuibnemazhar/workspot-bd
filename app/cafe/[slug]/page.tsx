@@ -236,7 +236,7 @@ export default function CafeDetails() {
             WorkSpot
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-surface via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-linear-to-t from-brand-surface via-transparent to-transparent"></div>
         <div className="absolute top-24 left-6 md:left-20">
           <Link
             href="/"
@@ -489,7 +489,7 @@ function ShareModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity cursor-pointer"
         onClick={onClose}
@@ -575,9 +575,7 @@ function ShareModal({
           </a>
         </div>
         <div className="bg-gray-50 p-4 rounded-xl flex items-center justify-between border border-gray-100">
-          <span className="text-sm text-gray-500 truncate max-w-[200px]">
-            {url}
-          </span>
+          <span className="text-sm text-gray-500 truncate max-w-50">{url}</span>
           <button
             onClick={handleCopy}
             className="text-brand-primary font-bold text-sm hover:underline flex items-center gap-1 cursor-pointer"
