@@ -28,7 +28,7 @@ import {
   CheckCircle,
   Zap,
   Activity,
-  Plus, // Fixed: Added Plus
+  Plus,
   ArrowUpRight,
   Filter,
 } from "lucide-react";
@@ -49,7 +49,7 @@ import {
 // --- COLORS ---
 const BRAND_PRIMARY = "#1e293b";
 const ACCENT_COLOR = "#3b82f6";
-const CHART_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"];
+const CHART_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#f43f5e"];
 
 // --- ADMIN CONFIG ---
 const ADMIN_EMAIL = "admin@example.com";
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<any>({});
   const [users, setUsers] = useState<any[]>([]);
   const [cafes, setCafes] = useState<any[]>([]);
-  const [posts, setPosts] = useState<any[]>([]); // Blog Posts
+  const [posts, setPosts] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
@@ -86,13 +86,13 @@ export default function AdminDashboard() {
         feed,
         { data: allCafes },
         { data: allReviews },
-        { data: allPosts }, // Fetch Blogs
+        { data: allPosts },
       ] = await Promise.all([
         getAdminUsers(),
         getActivityFeed(),
         supabase
           .from("cafes")
-          .select("*")
+          .select("*") // Ensure your DB select returns city, state, country
           .order("created_at", { ascending: false }),
         supabase
           .from("reviews")
@@ -104,7 +104,6 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false }),
       ]);
 
-      // FILTER OUT SUPER ADMIN FROM USER LIST
       const regularUsers = (userList || []).filter(
         (u: any) => u.email !== ADMIN_EMAIL
       );
@@ -121,30 +120,41 @@ export default function AdminDashboard() {
     init();
   }, []);
 
-  // 2. INTELLIGENT ANALYTICS PROCESSING
+  // 2. INTELLIGENT ANALYTICS PROCESSING (UPDATED LOGIC)
   const processAnalytics = (cafes: any[], reviews: any[], users: any[]) => {
     setStats({
       totalCafes: cafes.length,
       totalReviews: reviews.length,
       totalUsers: users.length,
-      pendingBlogs: 0, // Placeholder
+      pendingBlogs: 0,
     });
 
-    // A. Market Saturation (Meaningful Location Data)
-    // Answers: "Which areas have the most cafes?"
+    // A. Market Saturation (Smart Grouping)
     const locMap: Record<string, number> = {};
+
     cafes.forEach((c) => {
-      const area = c.location.split(",")[0].trim();
-      locMap[area] = (locMap[area] || 0) + 1;
+      let areaKey = "Unknown";
+
+      if (c.country === "USA") {
+        // For USA, we care about the State (e.g. NC, TX)
+        areaKey = c.state ? `${c.state} (USA)` : "USA";
+      } else {
+        // For BD/Others, we care about the City (e.g. Dhaka)
+        // Fallback to splitting location string if city column is empty (legacy)
+        areaKey = c.city || c.location?.split(",")[0].trim() || "Dhaka";
+      }
+
+      locMap[areaKey] = (locMap[areaKey] || 0) + 1;
     });
+
     const barData = Object.keys(locMap)
       .map((k) => ({ name: k, count: locMap[k] }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // Top 5 Areas
+      .slice(0, 6); // Top 6 Areas
+
     setMarketSaturation(barData);
 
     // B. Platform Velocity (Growth)
-    // Answers: "Are people actually using the app?"
     const growthMap: Record<string, number> = {};
     reviews.forEach((r) => {
       const date = new Date(r.created_at).toLocaleDateString("en-US", {
@@ -153,7 +163,7 @@ export default function AdminDashboard() {
       });
       growthMap[date] = (growthMap[date] || 0) + 1;
     });
-    // Create last 7 days buckets
+
     const chartData = Object.keys(growthMap).map((date) => ({
       date,
       reviews: growthMap[date],
@@ -171,7 +181,6 @@ export default function AdminDashboard() {
   const handleDelete = async (table: string, id: number | string) => {
     if (!confirm("Are you sure? This cannot be undone.")) return;
     await supabase.from(table).delete().eq("id", id);
-    // Optimistic Update
     if (table === "posts") setPosts(posts.filter((p) => p.id !== id));
     if (table === "cafes") setCafes(cafes.filter((c) => c.id !== id));
     if (table === "reviews") setReviews(reviews.filter((r) => r.id !== id));
@@ -200,7 +209,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 selection:bg-blue-100">
-      {/* SIDEBAR - MODERNIZED */}
+      {/* SIDEBAR */}
       <aside className="w-72 bg-white border-r border-slate-200 fixed h-full z-10 hidden md:flex flex-col">
         <div className="p-8">
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
@@ -257,7 +266,6 @@ export default function AdminDashboard() {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 md:ml-72 p-10">
-        {/* TOP HEADER */}
         <div className="flex justify-between items-end mb-10">
           <div>
             <h1 className="text-3xl font-bold capitalize text-slate-900">
@@ -274,7 +282,6 @@ export default function AdminDashboard() {
             >
               View Live Site <ExternalLink size={14} />
             </Link>
-            {/* DYNAMIC ACTIONS */}
             {activeTab === "cafes" && (
               <Link href="/add-cafe" className="btn-primary">
                 <Plus size={18} /> Add Workspace
@@ -291,7 +298,7 @@ export default function AdminDashboard() {
         {/* --- 1. OVERVIEW TAB --- */}
         {activeTab === "overview" && (
           <div className="space-y-8 animate-fade-in">
-            {/* KPI CARDS - GRID OF 4 */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <StatCard
                 icon={<Coffee size={24} />}
@@ -324,15 +331,15 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* CHART 1: MARKET SATURATION (Valuable) */}
+              {/* CHART 1: MARKET SATURATION (UPDATED) */}
               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm lg:col-span-2">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-bold text-lg text-slate-800">
-                      Market Saturation
+                      Regional Coverage
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Top areas by cafe density. Look for under-served areas.
+                      Workspaces by City (BD) or State (USA).
                     </p>
                   </div>
                 </div>
@@ -354,7 +361,11 @@ export default function AdminDashboard() {
                         dataKey="name"
                         type="category"
                         width={100}
-                        tick={{ fill: "#64748b", fontSize: 12 }}
+                        tick={{
+                          fill: "#64748b",
+                          fontSize: 12,
+                          fontWeight: "bold",
+                        }}
                       />
                       <Tooltip
                         cursor={{ fill: "transparent" }}
@@ -438,7 +449,7 @@ export default function AdminDashboard() {
           <AdminTable
             title="Workspace Directory"
             onSearch={setSearchQuery}
-            header={["Name", "Location", "Status", "Actions"]}
+            header={["Name", "Region", "Status", "Actions"]}
           >
             {cafes
               .filter((c) =>
@@ -452,12 +463,15 @@ export default function AdminDashboard() {
                   <td className="p-4 pl-6">
                     <div className="font-bold text-slate-900">{cafe.name}</div>
                     <div className="text-xs text-slate-500 font-mono">
-                      ID: {cafe.id}
+                      {cafe.slug}
                     </div>
                   </td>
                   <td className="p-4 text-sm text-slate-500">
                     <MapPin size={14} className="inline mr-1 text-slate-400" />{" "}
-                    {cafe.location}
+                    {/* SMART LOCATION DISPLAY */}
+                    {cafe.country === "USA"
+                      ? `${cafe.city}, ${cafe.state}`
+                      : cafe.city || cafe.location}
                   </td>
                   <td className="p-4">
                     <button
@@ -499,7 +513,7 @@ export default function AdminDashboard() {
           </AdminTable>
         )}
 
-        {/* --- 3. BLOG POSTS (RESTORED) --- */}
+        {/* --- 3. BLOG POSTS --- */}
         {activeTab === "blog" && (
           <AdminTable
             title="Content Management"
@@ -552,7 +566,7 @@ export default function AdminDashboard() {
           </AdminTable>
         )}
 
-        {/* --- 4. USERS (FILTERED) --- */}
+        {/* --- 4. USERS --- */}
         {activeTab === "users" && (
           <AdminTable
             title="Registered Users"
