@@ -36,9 +36,17 @@ export default function EditCafePage() {
     name: "",
     slug: "",
     description: "",
-    location: "",
+
+    // --- GLOBAL LOCATION FIELDS ---
+    address_street: "",
+    city: "",
+    state: "",
+    country: "USA",
+    location: "", // Legacy field (kept for safety)
+    // ----------------------------
+
     google_map: "",
-    contact_number: "", // NEW FIELD
+    contact_number: "",
     latitude: "",
     longitude: "",
     cover_image: "",
@@ -68,9 +76,16 @@ export default function EditCafePage() {
           name: data.name,
           slug: data.slug,
           description: data.description,
-          location: data.location,
+
+          // Map new fields, fallback to parsing old location if needed
+          address_street: data.location ? data.location.split(",")[0] : "",
+          city: data.city || "",
+          state: data.state || "",
+          country: data.country || "USA",
+          location: data.location || "",
+
           google_map: data.google_map || "",
-          contact_number: data.contact_number || "", // FETCH IT
+          contact_number: data.contact_number || "",
           latitude: data.latitude || "",
           longitude: data.longitude || "",
           cover_image: data.cover_image || "",
@@ -92,7 +107,27 @@ export default function EditCafePage() {
     fetchCafe();
   }, [params.slug]);
 
-  // IMAGE UPLOAD (Same as Add Page)
+  // --- CITY HANDLER (Same as Add Page) ---
+  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedCity = e.target.value;
+    let newState = "";
+
+    // Auto-fill State logic
+    if (selectedCity === "Cary") newState = "NC";
+    else if (selectedCity === "Frisco") newState = "TX";
+    else if (selectedCity === "Bellevue") newState = "WA";
+    else if (selectedCity === "Berkeley") newState = "CA";
+    else if (selectedCity === "Seattle") newState = "WA";
+    else if (selectedCity === "Dhaka") newState = "Dhaka";
+
+    setFormData({
+      ...formData,
+      city: selectedCity,
+      state: newState,
+    });
+  };
+
+  // IMAGE UPLOAD
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
@@ -118,15 +153,24 @@ export default function EditCafePage() {
   const handleUpdate = async () => {
     setSubmitting(true);
 
+    // Reconstruct legacy string
+    const legacyLocation = `${formData.address_street}, ${formData.city}`;
+
     const { error } = await supabase
       .from("cafes")
       .update({
         name: formData.name,
         slug: formData.slug,
         description: formData.description,
-        location: formData.location,
+
+        // Update Global Fields
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        location: legacyLocation, // Keep legacy synced
+
         google_map: formData.google_map,
-        contact_number: formData.contact_number, // UPDATE IT
+        contact_number: formData.contact_number,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
         cover_image: formData.cover_image,
@@ -281,7 +325,7 @@ export default function EditCafePage() {
               </div>
             </div>
 
-            {/* 3. Location */}
+            {/* 3. Location (UPDATED for Global) */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-sm">
@@ -290,19 +334,68 @@ export default function EditCafePage() {
                 Location
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="col-span-2">
+                {/* CITY SELECTOR */}
+                <div className="col-span-2 md:col-span-1">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Short Address
+                    City (Target Hubs)
+                  </label>
+                  <div className="relative">
+                    <MapPin
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={16}
+                    />
+                    <select
+                      value={formData.city}
+                      onChange={handleCityChange}
+                      className="w-full pl-10 p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-bold text-gray-800"
+                    >
+                      <option value="">Select City...</option>
+                      <option value="Cary">Cary, NC</option>
+                      <option value="Frisco">Frisco, TX</option>
+                      <option value="Bellevue">Bellevue, WA</option>
+                      <option value="Berkeley">Berkeley, CA</option>
+                      <option value="Seattle">Seattle, WA</option>
+                      <option value="Dhaka">Dhaka (Legacy)</option>
+                      <option value="Other">Other...</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* STATE */}
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    State
                   </label>
                   <input
                     type="text"
-                    value={formData.location}
+                    value={formData.state}
                     onChange={(e) =>
-                      setFormData({ ...formData, location: e.target.value })
+                      setFormData({ ...formData, state: e.target.value })
                     }
                     className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                    placeholder="e.g. NC"
                   />
                 </div>
+
+                {/* STREET ADDRESS */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Street Address
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address_street}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        address_street: e.target.value,
+                      })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                    placeholder="e.g. 122 E Chatham St"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Latitude
@@ -386,7 +479,7 @@ export default function EditCafePage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 mb-1 block">
-                    Avg Price (Tk)
+                    Avg Price ($/Tk)
                   </label>
                   <div className="relative">
                     <DollarSign
@@ -462,7 +555,7 @@ export default function EditCafePage() {
               </div>
             </div>
 
-            {/* 6. Social & Contact (UPDATED) */}
+            {/* 6. Social & Contact */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-md font-bold text-gray-900 mb-4">
                 Contact & Social

@@ -25,16 +25,11 @@ import {
   MapPin,
   Star,
   Ban,
-  CheckCircle,
-  Zap,
   Activity,
   Plus,
-  ArrowUpRight,
   Filter,
 } from "lucide-react";
 import {
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -43,15 +38,17 @@ import {
   BarChart,
   Bar,
   Cell,
-  Legend,
 } from "recharts";
 
 // --- COLORS ---
-const BRAND_PRIMARY = "#1e293b";
-const ACCENT_COLOR = "#3b82f6";
-const CHART_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#f43f5e"];
-
-// --- ADMIN CONFIG ---
+const CHART_COLORS = [
+  "#3b82f6",
+  "#8b5cf6",
+  "#10b981",
+  "#f59e0b",
+  "#f43f5e",
+  "#6366f1",
+];
 const ADMIN_EMAIL = "admin@example.com";
 
 export default function AdminDashboard() {
@@ -68,8 +65,8 @@ export default function AdminDashboard() {
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
   // --- ANALYTICS STATES ---
-  const [marketSaturation, setMarketSaturation] = useState<any[]>([]);
-  const [growthData, setGrowthData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [viewRegion, setViewRegion] = useState<"ALL" | "BD" | "USA">("BD"); // Default to BD view
   const [searchQuery, setSearchQuery] = useState("");
 
   // 1. INITIAL LOAD
@@ -78,7 +75,6 @@ export default function AdminDashboard() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      // Uncomment for production security:
       // if (!user || user.email !== ADMIN_EMAIL) return router.push('/');
 
       const [
@@ -92,7 +88,7 @@ export default function AdminDashboard() {
         getActivityFeed(),
         supabase
           .from("cafes")
-          .select("*") // Ensure your DB select returns city, state, country
+          .select("*")
           .order("created_at", { ascending: false }),
         supabase
           .from("reviews")
@@ -114,72 +110,150 @@ export default function AdminDashboard() {
       setReviews(allReviews || []);
       setPosts(allPosts || []);
 
-      processAnalytics(allCafes || [], allReviews || [], regularUsers);
+      // Calculate Basics
+      setStats({
+        totalCafes: allCafes?.length || 0,
+        totalReviews: allReviews?.length || 0,
+        totalUsers: regularUsers.length,
+      });
+
       setLoading(false);
     }
     init();
   }, []);
 
-  // 2. INTELLIGENT ANALYTICS PROCESSING (UPDATED LOGIC)
-  const processAnalytics = (cafes: any[], reviews: any[], users: any[]) => {
-    setStats({
-      totalCafes: cafes.length,
-      totalReviews: reviews.length,
-      totalUsers: users.length,
-      pendingBlogs: 0,
-    });
+  // Reruns whenever 'cafes' or 'viewRegion' changes
+  // 2. DYNAMIC CHART CALCULATOR (FINAL FIX)
+  useEffect(() => {
+    if (cafes.length === 0) return;
 
-    // A. Market Saturation (Smart Grouping)
     const locMap: Record<string, number> = {};
 
-    cafes.forEach((c) => {
-      let areaKey = "Unknown";
+    // A. LISTS FOR MATCHING
+    const dhakaHubs = [
+      "Gulshan",
+      "Banani",
+      "Dhanmondi",
+      "Uttara",
+      "Mirpur",
+      "Mohakhali",
+      "Badda",
+      "Bashundhara",
+      "Agargaon",
+      "Lalmatia",
+      "Mohammadpur",
+      "Khilgaon",
+      "Farmgate",
+      "Baridhara",
+      "Niketon",
+      "Rampura",
+    ];
 
-      if (c.country === "USA") {
-        // For USA, we care about the State (e.g. NC, TX)
-        areaKey = c.state ? `${c.state} (USA)` : "USA";
-      } else {
-        // For BD/Others, we care about the City (e.g. Dhaka)
-        // Fallback to splitting location string if city column is empty (legacy)
-        areaKey = c.city || c.location?.split(",")[0].trim() || "Dhaka";
+    // Map Full State Names to Codes (Fixes "Unknown State" if user typed full name)
+    const stateNameMap: Record<string, string> = {
+      "north carolina": "NC",
+      texas: "TX",
+      washington: "WA",
+      california: "CA",
+      "new york": "NY",
+      massachusetts: "MA",
+    };
+
+    cafes.forEach((c) => {
+      let country = c.country || "Bangladesh";
+      const locationStr = (c.location || "").toLowerCase();
+
+      // --- CRITICAL FIX: Infer Country from Location String if Data is Wrong ---
+      // If db says "USA" but location says "Agargaon", treat as Bangladesh
+      if (dhakaHubs.some((hub) => locationStr.includes(hub.toLowerCase()))) {
+        country = "Bangladesh";
+      }
+      // If db says "Bangladesh" but location says "North Carolina", treat as USA
+      if (
+        locationStr.includes("north carolina") ||
+        locationStr.includes(" texas ")
+      ) {
+        country = "USA";
       }
 
-      locMap[areaKey] = (locMap[areaKey] || 0) + 1;
+      // --- LOGIC 1: USA VIEW ---
+      if (viewRegion === "USA") {
+        if (country !== "USA") return;
+
+        // 1. Try DB Column
+        let stateLabel = c.state;
+
+        // 2. Fallback: Check for Full State Names in location string
+        if (!stateLabel) {
+          for (const [fullName, code] of Object.entries(stateNameMap)) {
+            if (locationStr.includes(fullName)) {
+              stateLabel = code;
+              break;
+            }
+          }
+        }
+
+        // 3. Fallback: Check for 2-letter code regex (e.g. ", NC")
+        if (!stateLabel) {
+          const match = c.location?.match(/,\s*([A-Z]{2})\b/);
+          if (match) stateLabel = match[1];
+        }
+
+        locMap[stateLabel || "Unknown State"] =
+          (locMap[stateLabel || "Unknown State"] || 0) + 1;
+      }
+
+      // --- LOGIC 2: BANGLADESH VIEW ---
+      else if (viewRegion === "BD") {
+        if (country === "USA") return;
+
+        // 1. Check Hubs List (Matches "Agargaon" even if it's the only word)
+        const foundHub = dhakaHubs.find((hub) =>
+          locationStr.includes(hub.toLowerCase())
+        );
+
+        let label = foundHub;
+
+        // 2. Fallback: Parse comma string
+        if (!label && c.location) {
+          const parts = c.location.split(",");
+          // Logic: If 3 parts "Level 4, Agargaon, Dhaka" -> take middle.
+          // If 2 parts "Agargaon, Dhaka" -> take first.
+          if (parts.length > 2) label = parts[1].trim();
+          else label = parts[0].trim();
+        }
+
+        // Clean up numbers (e.g. "Road 11") -> "Dhaka (Misc)"
+        if (label && !isNaN(parseInt(label))) label = "Dhaka (Misc)";
+
+        locMap[label || "Dhaka (Misc)"] =
+          (locMap[label || "Dhaka (Misc)"] || 0) + 1;
+      }
+
+      // --- LOGIC 3: ALL VIEW ---
+      else {
+        const label = country === "USA" ? "United States" : "Bangladesh";
+        locMap[label] = (locMap[label] || 0) + 1;
+      }
     });
 
-    const barData = Object.keys(locMap)
+    // Formatting for Recharts
+    const formattedData = Object.keys(locMap)
       .map((k) => ({ name: k, count: locMap[k] }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6); // Top 6 Areas
+      .slice(0, 10);
 
-    setMarketSaturation(barData);
-
-    // B. Platform Velocity (Growth)
-    const growthMap: Record<string, number> = {};
-    reviews.forEach((r) => {
-      const date = new Date(r.created_at).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      growthMap[date] = (growthMap[date] || 0) + 1;
-    });
-
-    const chartData = Object.keys(growthMap).map((date) => ({
-      date,
-      reviews: growthMap[date],
-    }));
-    setGrowthData(chartData);
-  };
-
+    setChartData(formattedData);
+  }, [cafes, viewRegion]);
   // --- ACTIONS ---
   const handleBanUser = async (id: string) => {
-    if (!confirm("Ban this user for 100 years?")) return;
+    if (!confirm("Ban this user?")) return;
     await banUser(id);
     alert("User Banned");
   };
 
   const handleDelete = async (table: string, id: number | string) => {
-    if (!confirm("Are you sure? This cannot be undone.")) return;
+    if (!confirm("Are you sure?")) return;
     await supabase.from(table).delete().eq("id", id);
     if (table === "posts") setPosts(posts.filter((p) => p.id !== id));
     if (table === "cafes") setCafes(cafes.filter((c) => c.id !== id));
@@ -202,8 +276,8 @@ export default function AdminDashboard() {
 
   if (loading)
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 text-brand-primary font-bold">
-        Loading WorkSpot Admin...
+      <div className="h-screen flex items-center justify-center text-brand-primary font-bold">
+        Loading Admin...
       </div>
     );
 
@@ -302,98 +376,139 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <StatCard
                 icon={<Coffee size={24} />}
-                label="Active Workspaces"
+                label="Total Workspaces"
                 value={stats.totalCafes}
                 color="text-blue-600 bg-blue-50"
-                trend="+2 this week"
               />
               <StatCard
                 icon={<MessageSquare size={24} />}
                 label="Total Reviews"
                 value={stats.totalReviews}
                 color="text-purple-600 bg-purple-50"
-                trend="+15% growth"
               />
               <StatCard
                 icon={<Users size={24} />}
                 label="Registered Users"
                 value={stats.totalUsers}
                 color="text-emerald-600 bg-emerald-50"
-                trend="Steady increase"
               />
               <StatCard
-                icon={<Zap size={24} />}
-                label="System Health"
-                value="98%"
+                icon={<Activity size={24} />}
+                label="Growth Rate"
+                value="+12%"
                 color="text-orange-600 bg-orange-50"
-                trend="All systems go"
               />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* CHART 1: MARKET SATURATION (UPDATED) */}
+              {/* CHART 1: DYNAMIC MARKET SATURATION */}
               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm lg:col-span-2">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-bold text-lg text-slate-800">
-                      Regional Coverage
+                      Workspace Distribution
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Workspaces by City (BD) or State (USA).
+                      {viewRegion === "BD"
+                        ? "Showing top neighborhoods in Dhaka."
+                        : viewRegion === "USA"
+                        ? "Showing coverage by US State."
+                        : "Comparing total listings by Country."}
                     </p>
                   </div>
-                </div>
-                <div className="h-72 w-full text-xs">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={marketSaturation}
-                      layout="vertical"
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+
+                  {/* REGION FILTER TOGGLE */}
+                  <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+                    <button
+                      onClick={() => setViewRegion("BD")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        viewRegion === "BD"
+                          ? "bg-white shadow-sm text-blue-600"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
                     >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        horizontal={true}
-                        vertical={false}
-                        stroke="#f1f5f9"
-                      />
-                      <XAxis type="number" hide />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        width={100}
-                        tick={{
-                          fill: "#64748b",
-                          fontSize: 12,
-                          fontWeight: "bold",
-                        }}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "transparent" }}
-                        contentStyle={{
-                          borderRadius: "12px",
-                          border: "none",
-                          boxShadow: "0 4px 20px -5px rgba(0,0,0,0.1)",
-                        }}
-                      />
-                      <Bar
-                        dataKey="count"
-                        fill="#3b82f6"
-                        radius={[0, 4, 4, 0]}
-                        barSize={32}
+                      Bangladesh
+                    </button>
+                    <button
+                      onClick={() => setViewRegion("USA")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        viewRegion === "USA"
+                          ? "bg-white shadow-sm text-blue-600"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      USA
+                    </button>
+                    <button
+                      onClick={() => setViewRegion("ALL")}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        viewRegion === "ALL"
+                          ? "bg-white shadow-sm text-blue-600"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Compare
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-72 w-full text-xs">
+                  {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chartData}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                       >
-                        {marketSaturation.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={CHART_COLORS[index % CHART_COLORS.length]}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          horizontal={true}
+                          vertical={false}
+                          stroke="#f1f5f9"
+                        />
+                        <XAxis type="number" hide />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          width={100}
+                          tick={{
+                            fill: "#64748b",
+                            fontSize: 11,
+                            fontWeight: "bold",
+                          }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: "transparent" }}
+                          contentStyle={{
+                            borderRadius: "12px",
+                            border: "none",
+                            boxShadow: "0 4px 20px -5px rgba(0,0,0,0.1)",
+                          }}
+                        />
+                        <Bar
+                          dataKey="count"
+                          fill="#3b82f6"
+                          radius={[0, 4, 4, 0]}
+                          barSize={24}
+                        >
+                          {chartData.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={CHART_COLORS[index % CHART_COLORS.length]}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 italic">
+                      No data available for this region yet.
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* CHART 2: RECENT ACTIVITY */}
+              {/* CHART 2: LIVE ACTIVITY */}
               <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm lg:col-span-1 h-100 overflow-hidden flex flex-col">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                   <Activity size={18} className="text-slate-400" /> Live Feed
@@ -467,8 +582,7 @@ export default function AdminDashboard() {
                     </div>
                   </td>
                   <td className="p-4 text-sm text-slate-500">
-                    <MapPin size={14} className="inline mr-1 text-slate-400" />{" "}
-                    {/* SMART LOCATION DISPLAY */}
+                    <MapPin size={14} className="inline mr-1 text-slate-400" />
                     {cafe.country === "USA"
                       ? `${cafe.city}, ${cafe.state}`
                       : cafe.city || cafe.location}
@@ -672,14 +786,11 @@ export default function AdminDashboard() {
 
 // --- SUB COMPONENTS ---
 
-function StatCard({ icon, label, value, color, trend }: any) {
+function StatCard({ icon, label, value, color }: any) {
   return (
     <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between h-32 hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start">
         <div className={`p-3 rounded-2xl ${color}`}>{icon}</div>
-        <span className="text-[10px] font-bold bg-slate-50 text-slate-500 px-2 py-1 rounded-full border border-slate-100">
-          {trend}
-        </span>
       </div>
       <div>
         <h3 className="text-2xl font-black text-slate-900">{value}</h3>
