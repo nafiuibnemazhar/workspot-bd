@@ -14,11 +14,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import JsonLd from "@/components/JsonLd";
+import CityHeroSearch from "@/components/CityHeroSearch"; // <--- 1. IMPORT THIS
 
 // CONSTANTS
 const ITEMS_PER_PAGE = 12;
 
-// TYPE DEFINITIONS (Next.js 15+)
+// TYPE DEFINITIONS
 type Props = {
   params: Promise<{ country: string; state: string; city: string }>;
   searchParams: Promise<{ page?: string }>;
@@ -71,15 +72,23 @@ export default async function CityPage({ params, searchParams }: Props) {
   const from = (currentPage - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  // FETCH CAFES WITH PAGINATION
-  const query = supabase
-    .from("cafes")
-    .select("*", { count: "exact" }) // Request count for pagination
-    .ilike("city", cityDecoded)
-    // Flexible state matching (Exact for USA, loose for others)
-    .ilike("state", country.toLowerCase() === "usa" ? stateDecoded : "%")
-    .order("rating", { ascending: false })
-    .range(from, to);
+  // --- QUERY BUILDER ---
+  let query = supabase.from("cafes").select("*", { count: "exact" });
+
+  // 1. LOCATION FILTER
+  if (country.toLowerCase() === "bangladesh") {
+    query = query.ilike("location", `%${cityDecoded}%`);
+  } else {
+    query = query.ilike("city", cityDecoded);
+  }
+
+  // 2. STATE FILTER (USA Only)
+  if (country.toLowerCase() === "usa") {
+    query = query.ilike("state", stateDecoded);
+  }
+
+  // 3. ORDERING & PAGINATION
+  query = query.order("rating", { ascending: false }).range(from, to);
 
   const { data: cafes, count } = await query;
 
@@ -106,7 +115,7 @@ export default async function CityPage({ params, searchParams }: Props) {
       <JsonLd data={jsonLd} />
       <Navbar />
 
-      {/* HERO SECTION (Matches Branding) */}
+      {/* HERO SECTION */}
       <div className="bg-brand-primary text-white pt-32 pb-16 px-6">
         <div className="container mx-auto max-w-4xl text-center">
           <span className="text-brand-accent font-bold tracking-widest uppercase text-xs mb-4 block">
@@ -116,10 +125,13 @@ export default async function CityPage({ params, searchParams }: Props) {
             Workspaces in{" "}
             <span className="text-brand-accent">{cityDecoded}</span>
           </h1>
-          <p className="text-gray-300 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
+          <p className="text-gray-300 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-6">
             We found <strong>{totalCafes}</strong> verified laptop-friendly
             spots in {cityDecoded}, {stateDecoded}.
           </p>
+
+          {/* 2. ADD THE SEARCH COMPONENT HERE */}
+          <CityHeroSearch />
         </div>
       </div>
 
@@ -135,13 +147,18 @@ export default async function CityPage({ params, searchParams }: Props) {
                 );
                 const currency = getCurrency(cafe);
 
+                const displayLocation =
+                  cafe.country === "USA"
+                    ? cafe.address_street || cafe.location
+                    : cafe.location;
+
                 return (
                   <Link
                     href={`/cafe/${cafe.slug}`}
                     key={cafe.id}
                     className="group flex flex-col gap-4 cursor-pointer"
                   >
-                    {/* CARD IMAGE AREA - Matches Homepage Exactly */}
+                    {/* CARD IMAGE AREA */}
                     <div className="relative aspect-4/3 rounded-3xl overflow-hidden bg-gray-100 shadow-sm border border-brand-border/50">
                       {cafe.cover_image ? (
                         <img
@@ -199,11 +216,12 @@ export default async function CityPage({ params, searchParams }: Props) {
                       </div>
 
                       <p className="text-brand-muted text-sm flex items-center gap-1.5 mb-3">
-                        <MapPin size={14} className="text-brand-muted" />
+                        <MapPin
+                          size={14}
+                          className="text-brand-muted shrink-0"
+                        />
                         <span className="truncate font-medium">
-                          {cafe.address_street ||
-                            cafe.location ||
-                            "View for details"}
+                          {displayLocation || "View for details"}
                         </span>
                       </p>
 
