@@ -28,10 +28,11 @@ import {
   Linkedin,
   Twitter,
   Send,
-  Banknote, // ADDED: Icon for Price
+  Banknote,
 } from "lucide-react";
 import Link from "next/link";
 import DOMPurify from "dompurify";
+import JsonLd from "@/components/JsonLd";
 
 const ViewMap = dynamic(() => import("@/components/ViewMap"), {
   ssr: false,
@@ -61,25 +62,21 @@ const isOpenNow = (openTime: string, closeTime: string) => {
 
 // --- HELPER: GET CURRENCY SYMBOL ---
 const getCurrency = (cafe: any) => {
-  // If explicitly Bangladesh OR Legacy Dhaka city -> BDT
   if (cafe.country === "Bangladesh" || cafe.city === "Dhaka") return "৳";
-  // Default to USD for global/USA
   return "$";
 };
 
 // --- HELPER: GET FULL ADDRESS ---
 const getAddress = (cafe: any) => {
-  // If we have new global fields, build a nice string
   if (cafe.city) {
     return [cafe.address_street, cafe.city, cafe.state]
       .filter(Boolean)
       .join(", ");
   }
-  // Fallback to legacy field
   return cafe.location || "Unknown Location";
 };
 
-// --- ICONS ---
+// ... (ICONS REMAIN THE SAME - HIDDEN FOR BREVITY) ...
 const GoogleIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     width={size}
@@ -106,7 +103,6 @@ const GoogleIcon = ({ size = 20 }: { size?: number }) => (
     />
   </svg>
 );
-// ... (Keep WhatsApp/Messenger Icons same as before) ...
 const WhatsAppIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     width={size}
@@ -182,23 +178,19 @@ export default function CafeDetails() {
     let url = "";
 
     if (cafe.latitude && cafe.longitude) {
-      // Precise Navigation
       url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
     } else {
-      // Robust Search Query: Name + City + State
       const addressQuery = [
         cafe.name,
         cafe.address_street,
         cafe.city,
         cafe.state,
       ]
-        .filter(Boolean) // remove empty/null values
+        .filter(Boolean)
         .join(" ");
-
       const query = encodeURIComponent(addressQuery || cafe.location);
       url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
     }
-
     window.open(url, "_blank");
   };
 
@@ -232,8 +224,55 @@ export default function CafeDetails() {
   const displayAddress = getAddress(cafe);
   const currencySymbol = getCurrency(cafe);
 
+  // ---------------------------------------------------------
+  // 1. ADD THIS LOGIC BLOCK HERE (Schema Construction)
+  // ---------------------------------------------------------
+  const jsonLd = cafe
+    ? {
+        "@context": "https://schema.org",
+        "@type": "CafeOrCoffeeShop",
+        name: cafe.name,
+        image: [cafe.cover_image],
+        description: cafe.description,
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: cafe.address_street || cafe.location,
+          addressLocality: cafe.city,
+          addressRegion: cafe.state,
+          addressCountry: cafe.country || "USA",
+        },
+        geo: {
+          "@type": "GeoCoordinates",
+          latitude: cafe.latitude,
+          longitude: cafe.longitude,
+        },
+        priceRange: cafe.avg_price
+          ? cafe.country === "USA"
+            ? "$$"
+            : "৳৳"
+          : "$",
+        telephone: cafe.contact_number,
+        // Replace with your actual domain
+        url: `https://workspot-bd.com/cafe/${cafe.slug}`,
+        aggregateRating:
+          cafe.rating > 0
+            ? {
+                "@type": "AggregateRating",
+                ratingValue: cafe.rating,
+                reviewCount: 1, // Defaulting to 1 to avoid schema errors if count is missing
+                bestRating: "5",
+                worstRating: "1",
+              }
+            : undefined,
+      }
+    : null;
+  // ---------------------------------------------------------
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
+      {/* 2. ADD THIS COMPONENT HERE (Schema Injection) */}
+      {jsonLd && <JsonLd data={jsonLd} />}
+
       <Navbar />
 
       {isOwner && (
