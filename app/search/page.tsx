@@ -9,22 +9,32 @@ import {
   Search,
   MapPin,
   Wifi,
-  Zap,
   Wind,
   Star,
   Filter,
   X,
-  Car, // Added Car icon
+  Car,
   Power,
+  Coffee,
+  TrendingUp,
 } from "lucide-react";
+
+// --- QUICK SEARCH OPTIONS ---
+const QUICK_SEARCHES = [
+  { label: "Cary, NC", value: "Cary", icon: "🇺🇸" },
+  { label: "Frisco, TX", value: "Frisco", icon: "🇺🇸" },
+  { label: "Bellevue, WA", value: "Bellevue", icon: "🇺🇸" },
+  { label: "Gulshan", value: "Gulshan", icon: "🇧🇩" },
+  { label: "Banani", value: "Banani", icon: "🇧🇩" },
+  { label: "Dhanmondi", value: "Dhanmondi", icon: "🇧🇩" },
+  { label: "Agargaon", value: "Agargaon", icon: "🇧🇩" },
+];
 
 export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-10 text-center text-brand-primary">
-          Loading Search...
-        </div>
+        <div className="p-10 text-center text-brand-primary">Loading...</div>
       }
     >
       <SearchContent />
@@ -58,12 +68,14 @@ function SearchContent() {
 
       let dbQuery = supabase.from("cafes").select("*");
 
-      // A. Text Search (Name OR Location)
+      // A. Text Search
       if (query) {
-        dbQuery = dbQuery.or(`name.ilike.%${query}%,location.ilike.%${query}%`);
+        dbQuery = dbQuery.or(
+          `name.ilike.%${query}%,location.ilike.%${query}%,city.ilike.%${query}%,state.ilike.%${query}%`
+        );
       }
 
-      // B. Boolean Filters (Real Columns)
+      // B. Boolean Filters
       if (filters.has_wifi) dbQuery = dbQuery.eq("has_wifi", true);
       if (filters.has_ac) dbQuery = dbQuery.eq("has_ac", true);
       if (filters.has_parking) dbQuery = dbQuery.eq("has_parking", true);
@@ -91,7 +103,6 @@ function SearchContent() {
       setLoading(false);
     }
 
-    // Debounce to prevent too many requests while typing
     const timer = setTimeout(() => fetchResults(), 400);
     return () => clearTimeout(timer);
   }, [query, filters, sort]);
@@ -101,10 +112,8 @@ function SearchContent() {
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
 
-    // Update URL Params for shareability
     const params = new URLSearchParams(searchParams.toString());
 
-    // Handle Boolean Filters
     if (key === "has_wifi")
       value ? params.set("wifi", "true") : params.delete("wifi");
     if (key === "has_ac")
@@ -113,13 +122,18 @@ function SearchContent() {
       value ? params.set("parking", "true") : params.delete("parking");
     if (key === "has_socket")
       value ? params.set("socket", "true") : params.delete("socket");
-
-    // Handle Price
     if (key === "price")
       value !== "all" ? params.set("price", value) : params.delete("price");
 
-    // Handle Query
-    if (key === "q") value ? params.set("q", value) : params.delete("q");
+    if (key === "q") {
+      if (value) {
+        params.set("q", value);
+        setQuery(value);
+      } else {
+        params.delete("q");
+        setQuery("");
+      }
+    }
 
     router.replace(`?${params.toString()}`, { scroll: false });
   };
@@ -129,17 +143,14 @@ function SearchContent() {
       <Navbar />
 
       {/* HEADER & SEARCH BAR */}
-      <div className="bg-brand-primary pt-28 pb-8 px-6 sticky top-0 z-20 shadow-xl">
+      <div className="bg-brand-primary pt-28 pb-6 px-6 sticky top-0 z-20 shadow-xl">
         <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
+          <div className="flex flex-col md:flex-row gap-4 items-center mb-4">
             <div className="relative flex-1 w-full">
               <input
                 type="text"
                 value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  updateFilter("q", e.target.value);
-                }}
+                onChange={(e) => updateFilter("q", e.target.value)}
                 placeholder="Search area (e.g. Banani) or cafe name..."
                 className="w-full p-3 pl-10 rounded-xl border-none focus:ring-2 focus:ring-brand-accent bg-white/10 text-white placeholder:text-brand-muted font-medium"
               />
@@ -147,6 +158,14 @@ function SearchContent() {
                 className="absolute left-3 top-3.5 text-brand-muted"
                 size={18}
               />
+              {query && (
+                <button
+                  onClick={() => updateFilter("q", "")}
+                  className="absolute right-3 top-3.5 text-brand-muted hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              )}
             </div>
             <button
               onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
@@ -154,6 +173,26 @@ function SearchContent() {
             >
               <Filter size={18} /> Filters
             </button>
+          </div>
+
+          {/* QUICK SEARCH CHIPS */}
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
+            <span className="text-brand-muted text-xs font-bold uppercase tracking-wider flex items-center shrink-0">
+              <TrendingUp size={12} className="mr-1" /> Popular:
+            </span>
+            {QUICK_SEARCHES.map((item) => (
+              <button
+                key={item.value}
+                onClick={() => updateFilter("q", item.value)}
+                className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all border shrink-0 flex items-center gap-1.5 ${
+                  query === item.value
+                    ? "bg-brand-accent text-brand-primary border-brand-accent shadow-md"
+                    : "bg-white/10 border-white/10 text-gray-300 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <span>{item.icon}</span> {item.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -165,7 +204,6 @@ function SearchContent() {
             mobileFiltersOpen ? "block" : "hidden"
           } md:col-span-1 space-y-8`}
         >
-          {/* Price Filter */}
           <div className="bg-white p-5 rounded-2xl border border-brand-border shadow-sm">
             <h3 className="font-bold text-brand-primary mb-4">Price Range</h3>
             <div className="space-y-2">
@@ -185,17 +223,16 @@ function SearchContent() {
                     {p === "all"
                       ? "Any Price"
                       : p === "mid"
-                      ? "৳300 - ৳600"
+                      ? "Average"
                       : p === "budget"
-                      ? "Under ৳300"
-                      : "Over ৳600"}
+                      ? "Budget Friendly"
+                      : "Premium"}
                   </span>
                 </label>
               ))}
             </div>
           </div>
 
-          {/* Amenities Filter (REAL COLUMNS) */}
           <div className="bg-white p-5 rounded-2xl border border-brand-border shadow-sm">
             <h3 className="font-bold text-brand-primary mb-4">Amenities</h3>
             <div className="space-y-3">
@@ -238,7 +275,7 @@ function SearchContent() {
                 price: "all",
               });
               setQuery("");
-              router.replace("/search"); // Clear URL
+              router.replace("/search");
             }}
             className="w-full py-2 text-sm font-bold text-gray-400 hover:text-brand-primary transition-colors"
           >
@@ -291,60 +328,75 @@ function SearchContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
-              {cafes.map((cafe) => (
-                <Link
-                  href={`/cafe/${cafe.slug}`}
-                  key={cafe.id}
-                  className="group bg-white rounded-3xl p-4 border border-brand-border hover:shadow-xl transition-all hover:-translate-y-1 block"
-                >
-                  <div className="relative h-48 rounded-2xl overflow-hidden mb-4 bg-gray-100">
-                    {cafe.cover_image ? (
-                      <img
-                        src={cafe.cover_image}
-                        alt={cafe.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              {cafes.map((cafe) => {
+                const currency = cafe.country === "Bangladesh" ? "৳" : "$";
+
+                // --- FIXED LOCATION LOGIC ---
+                // For USA: Show Street Address (e.g. 114 Academy St)
+                // For BD: Show Full Location (e.g. House 5, Gulshan 2) because 'city' is just 'Dhaka'
+                const displayLocation =
+                  cafe.country === "USA"
+                    ? cafe.address_street || cafe.location
+                    : cafe.location;
+
+                return (
+                  <Link
+                    href={`/cafe/${cafe.slug}`}
+                    key={cafe.id}
+                    className="group bg-white rounded-3xl p-4 border border-brand-border hover:shadow-xl transition-all hover:-translate-y-1 block"
+                  >
+                    <div className="relative h-48 rounded-2xl overflow-hidden mb-4 bg-gray-100">
+                      {cafe.cover_image ? (
+                        <img
+                          src={cafe.cover_image}
+                          alt={cafe.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-brand-muted bg-gray-100 font-medium flex-col gap-2">
+                          <Coffee size={32} />
+                          <span className="text-xs">No Image</span>
+                        </div>
+                      )}
+
+                      <div className="absolute top-3 right-3 bg-white/95 px-3 py-1 rounded-full text-xs font-bold text-brand-primary shadow-sm border border-gray-100">
+                        {currency} {cafe.avg_price}
+                      </div>
+
+                      {cafe.has_wifi && (
+                        <div className="absolute bottom-3 left-3 bg-brand-primary/90 p-1.5 rounded-lg text-white backdrop-blur-md">
+                          <Wifi size={14} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="font-bold text-lg text-brand-primary truncate pr-2">
+                        {cafe.name}
+                      </h3>
+                      <div className="flex items-center gap-1 text-xs font-bold bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
+                        <Star size={10} fill="currentColor" />{" "}
+                        {cafe.rating || "New"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-sm text-brand-muted mb-4">
+                      <MapPin
+                        size={14}
+                        className="text-brand-accent shrink-0"
                       />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">
-                        No Image
-                      </div>
-                    )}
-
-                    <div className="absolute top-3 right-3 bg-white/95 px-3 py-1 rounded-full text-xs font-bold text-brand-primary shadow-sm border border-gray-100">
-                      ৳ {cafe.avg_price}
+                      <span className="truncate">{displayLocation}</span>
                     </div>
 
-                    {cafe.has_wifi && (
-                      <div className="absolute bottom-3 left-3 bg-brand-primary/90 p-1.5 rounded-lg text-white backdrop-blur-md">
-                        <Wifi size={14} />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-bold text-lg text-brand-primary truncate pr-2">
-                      {cafe.name}
-                    </h3>
-                    <div className="flex items-center gap-1 text-xs font-bold bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-                      <Star size={10} fill="currentColor" />{" "}
-                      {cafe.rating || "New"}
+                    <div className="flex flex-wrap gap-2">
+                      {cafe.has_wifi && <AmenityTag label="Wifi" />}
+                      {cafe.has_ac && <AmenityTag label="AC" />}
+                      {cafe.has_parking && <AmenityTag label="Parking" />}
+                      {cafe.has_socket && <AmenityTag label="Power" />}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-sm text-brand-muted mb-4">
-                    <MapPin size={14} className="text-brand-accent" />{" "}
-                    {cafe.location}
-                  </div>
-
-                  {/* Real DB Columns for Tags */}
-                  <div className="flex flex-wrap gap-2">
-                    {cafe.has_wifi && <AmenityTag label="Wifi" />}
-                    {cafe.has_ac && <AmenityTag label="AC" />}
-                    {cafe.has_parking && <AmenityTag label="Parking" />}
-                    {cafe.has_socket && <AmenityTag label="Power" />}
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

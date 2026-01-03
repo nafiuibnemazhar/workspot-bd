@@ -36,6 +36,9 @@ interface Cafe {
   latitude: number;
   longitude: number;
   distance?: number;
+  country?: string; // Optional because old data might be null
+  city?: string;
+  state?: string;
 }
 
 const ITEMS_PER_PAGE = 9; // Show 9 cards per page
