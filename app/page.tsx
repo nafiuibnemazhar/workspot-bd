@@ -9,12 +9,12 @@ import {
   MapPin,
   Wind,
   Star,
-  Plus,
   Car,
   Navigation,
   ChevronLeft,
   ChevronRight,
   Globe,
+  Layers,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -36,14 +36,14 @@ interface Cafe {
   latitude: number;
   longitude: number;
   distance?: number;
-  country?: string; // Optional because old data might be null
+  country?: string;
   city?: string;
   state?: string;
 }
 
-const ITEMS_PER_PAGE = 9; // Show 9 cards per page
+const ITEMS_PER_PAGE = 9;
 
-// Haversine Distance Formula
+// --- UTILS ---
 function getDistanceFromLatLonInKm(
   lat1: number,
   lon1: number,
@@ -79,9 +79,83 @@ const isOpenNow = (openTime: string, closeTime: string) => {
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 };
 
+// --- REGION EXTRACTION LOGIC ---
+// This scans all cafes and returns a list of unique locations (e.g., "Gulshan", "Cary, NC")
+const getUniqueRegions = (data: Cafe[]) => {
+  const regions: Record<
+    string,
+    { label: string; count: number; type: "BD" | "USA" }
+  > = {};
+
+  // Standardizing BD Neighborhoods
+  const dhakaHubs = [
+    "Gulshan",
+    "Banani",
+    "Dhanmondi",
+    "Uttara",
+    "Mirpur",
+    "Mohakhali",
+    "Badda",
+    "Bashundhara",
+    "Agargaon",
+    "Lalmatia",
+    "Mohammadpur",
+    "Khilgaon",
+    "Farmgate",
+    "Baridhara",
+    "Niketon",
+    "Rampura",
+  ];
+
+  data.forEach((cafe) => {
+    let key = "";
+    let type: "BD" | "USA" = "BD";
+
+    // 1. Identify Country/Type
+    if (
+      cafe.country === "USA" ||
+      (cafe.location && cafe.location.includes("USA"))
+    ) {
+      type = "USA";
+      // Use City + State if available, else clean location
+      if (cafe.city && cafe.state) {
+        key = `${cafe.city}, ${cafe.state}`;
+      } else {
+        // Fallback cleanup
+        key = cafe.location.split(",")[0] || "Unknown USA";
+      }
+    } else {
+      // 2. BD Logic (Fuzzy match neighborhood)
+      type = "BD";
+      const locLower = (cafe.location || "").toLowerCase();
+      const matchedHub = dhakaHubs.find((h) =>
+        locLower.includes(h.toLowerCase())
+      );
+
+      if (matchedHub) {
+        key = matchedHub;
+      } else {
+        // If no hub matched, try city or default
+        key = cafe.city || "Dhaka (Misc)";
+      }
+    }
+
+    if (key) {
+      if (!regions[key]) regions[key] = { label: key, count: 0, type };
+      regions[key].count++;
+    }
+  });
+
+  // Convert to array and sort by count (most popular first)
+  return Object.values(regions).sort((a, b) => b.count - a.count);
+};
+
 export default function Home() {
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [filteredCafes, setFilteredCafes] = useState<Cafe[]>([]);
+  const [availableRegions, setAvailableRegions] = useState<
+    { label: string; count: number; type: string }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   // PAGINATION STATE
@@ -89,6 +163,7 @@ export default function Home() {
 
   // FILTERS STATE
   const [activeFilter, setActiveFilter] = useState<string>("All");
+  const [activeRegion, setActiveRegion] = useState<string>("All");
   const [sortingByDistance, setSortingByDistance] = useState(false);
 
   useEffect(() => {
@@ -103,33 +178,59 @@ export default function Home() {
       } else {
         setCafes(data || []);
         setFilteredCafes(data || []);
+
+        // Dynamic Region Generation
+        const regions = getUniqueRegions(data || []);
+        setAvailableRegions(regions);
       }
       setLoading(false);
     }
     fetchCafes();
   }, []);
 
-  // --- FILTER LOGIC ---
-  const applyFilter = (filterType: string) => {
-    const newFilter = activeFilter === filterType ? "All" : filterType;
-    setActiveFilter(newFilter);
+  // --- MASTER FILTER LOGIC ---
+  const applyFilters = (filterType: string | null, region: string | null) => {
+    // 1. Update State
+    const finalFilter = filterType !== null ? filterType : activeFilter;
+    const finalRegion = region !== null ? region : activeRegion;
 
+    if (filterType !== null) setActiveFilter(finalFilter);
+    if (region !== null) setActiveRegion(finalRegion);
+
+    // 2. Filter Base Data
     let result = [...cafes];
 
-    if (newFilter === "Popular") {
+    // A. Apply Region
+    if (finalRegion !== "All") {
+      result = result.filter((c) => {
+        // Match logic must mirror the extraction logic
+        if (c.country === "USA") {
+          const key = c.city && c.state ? `${c.city}, ${c.state}` : c.location;
+          return key.includes(finalRegion);
+        } else {
+          return (c.location || "")
+            .toLowerCase()
+            .includes(finalRegion.toLowerCase());
+        }
+      });
+    }
+
+    // B. Apply Attribute
+    if (finalFilter === "Popular") {
       result = result.filter((c) => c.rating >= 4.5);
-    } else if (newFilter === "Wifi") {
+    } else if (finalFilter === "Wifi") {
       result = result.filter((c) => c.has_wifi);
-    } else if (newFilter === "Power") {
+    } else if (finalFilter === "Power") {
       result = result.filter((c) => c.has_socket);
     }
 
+    // C. Apply Sort
     if (sortingByDistance) {
       result.sort((a, b) => (a.distance || 0) - (b.distance || 0));
     }
 
     setFilteredCafes(result);
-    setCurrentPage(1); // Reset to page 1 on filter change
+    setCurrentPage(1); // Reset page
   };
 
   const handleNearMe = () => {
@@ -161,14 +262,16 @@ export default function Home() {
         });
 
         setCafes(cafesWithDistance);
+        // Re-run filters with new data
+        setSortingByDistance(true);
+        setActiveFilter("All");
+        setActiveRegion("All");
+
         const sorted = [...cafesWithDistance].sort(
           (a, b) => (a.distance || 0) - (b.distance || 0)
         );
         setFilteredCafes(sorted);
-        setSortingByDistance(true);
         setLoading(false);
-        setActiveFilter("All");
-        setCurrentPage(1); // Reset to page 1
       },
       (error) => {
         alert("Location access denied.");
@@ -185,75 +288,88 @@ export default function Home() {
 
   const paginate = (pageNumber: number) => {
     setCurrentPage(pageNumber);
-    // Smooth scroll to top of grid
-    window.scrollTo({ top: 500, behavior: "smooth" });
+    if (typeof window !== "undefined")
+      window.scrollTo({ top: 500, behavior: "smooth" });
   };
 
   return (
-    <div className="min-h-screen bg-brand-surface flex flex-col font-sans">
+    <div className="min-h-screen bg-brand-surface flex flex-col font-sans text-brand-text">
       <Navbar />
       <Hero />
 
       <main className="grow container mx-auto px-6 py-12 relative z-10">
-        {/* NEW SECTION: BROWSE HUBS (Accessibility) */}
-        <div className="mb-12 border-b border-brand-border pb-8">
-          <h3 className="text-sm font-bold text-brand-muted uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Globe size={16} /> Browse by Region
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            {/* USA Hubs */}
-            <Link
-              href="/locations/usa/nc/cary"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇺🇸 Cary, NC
-            </Link>
-            <Link
-              href="/locations/usa/tx/frisco"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇺🇸 Frisco, TX
-            </Link>
-            <Link
-              href="/locations/usa/wa/bellevue"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇺🇸 Bellevue, WA
-            </Link>
-            {/* BD Hubs */}
-            <Link
-              href="/locations/bangladesh/dhaka/gulshan"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇧🇩 Gulshan
-            </Link>
-            <Link
-              href="/locations/bangladesh/dhaka/banani"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇧🇩 Banani
-            </Link>
-            <Link
-              href="/locations/bangladesh/dhaka/dhanmondi"
-              className="px-4 py-2 bg-white border border-brand-border rounded-lg text-sm font-bold text-brand-primary hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              🇧🇩 Dhanmondi
-            </Link>
+        {/* DYNAMIC REGION FILTER (Replaces Static Links) */}
+        {availableRegions.length > 0 && (
+          <div className="mb-12 border-b border-brand-border pb-8 animate-fade-in-up">
+            <div className="flex justify-between items-end mb-4">
+              <h3 className="text-sm font-bold text-brand-muted uppercase tracking-wider flex items-center gap-2">
+                <Globe size={16} /> Browse by Region
+              </h3>
+              {activeRegion !== "All" && (
+                <button
+                  onClick={() => applyFilters(null, "All")}
+                  className="text-xs font-bold text-red-500 hover:underline"
+                >
+                  Clear Region
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => applyFilters(null, "All")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  activeRegion === "All"
+                    ? "bg-brand-primary text-white border-brand-primary"
+                    : "bg-white border-brand-border text-brand-muted hover:border-brand-primary hover:text-brand-primary"
+                }`}
+              >
+                🌍 All Locations
+              </button>
+
+              {availableRegions.map((region) => (
+                <button
+                  key={region.label}
+                  onClick={() => applyFilters(null, region.label)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                    activeRegion === region.label
+                      ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                      : "bg-white border-brand-border text-brand-primary hover:border-brand-accent hover:text-brand-accent"
+                  }`}
+                >
+                  <span>{region.type === "USA" ? "🇺🇸" : "🇧🇩"}</span>
+                  {region.label}
+                  <span
+                    className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${
+                      activeRegion === region.label
+                        ? "bg-white/20 text-white"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {region.count}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* FILTERS HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
           <div>
             <h2 className="text-3xl font-extrabold text-brand-primary mb-2">
-              {sortingByDistance ? "Closest to You" : "Trending Spaces"}
+              {sortingByDistance
+                ? "Closest to You"
+                : activeRegion !== "All"
+                ? `${activeRegion} Workspaces`
+                : "Trending Spaces"}
             </h2>
             <p className="text-brand-muted text-lg">
               {activeFilter !== "All"
                 ? `Showing ${
                     activeFilter === "Power" ? "Power Backup" : activeFilter
                   } spots`
-                : "Most popular spots in our global network"}
+                : `Found ${filteredCafes.length} workspaces available`}
             </p>
           </div>
 
@@ -274,7 +390,7 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => applyFilter("Popular")}
+              onClick={() => applyFilters("Popular", null)}
               className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
                 activeFilter === "Popular"
                   ? "bg-brand-accent text-brand-primary border-brand-accent ring-2 ring-brand-accent/30"
@@ -284,7 +400,7 @@ export default function Home() {
               🔥 Popular
             </button>
             <button
-              onClick={() => applyFilter("Wifi")}
+              onClick={() => applyFilters("Wifi", null)}
               className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
                 activeFilter === "Wifi"
                   ? "bg-blue-100 text-blue-700 border-blue-200 ring-2 ring-blue-200"
@@ -294,7 +410,7 @@ export default function Home() {
               ⚡ Fast Wifi
             </button>
             <button
-              onClick={() => applyFilter("Power")}
+              onClick={() => applyFilters("Power", null)}
               className={`px-5 py-2.5 rounded-full border text-sm font-bold transition-all shadow-sm ${
                 activeFilter === "Power"
                   ? "bg-green-100 text-green-700 border-green-200 ring-2 ring-green-200"
@@ -319,16 +435,19 @@ export default function Home() {
         ) : filteredCafes.length === 0 ? (
           <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-brand-border">
             <div className="w-16 h-16 bg-brand-accent/10 text-brand-accent rounded-full flex items-center justify-center mx-auto mb-4">
-              <MapPin size={32} />
+              <Layers size={32} />
             </div>
             <h3 className="text-xl font-bold text-brand-primary">
               No workspaces match your filter
             </h3>
+            <p className="text-brand-muted mt-2">
+              Try selecting "All Locations" or clearing filters.
+            </p>
             <button
-              onClick={() => applyFilter(activeFilter)}
-              className="text-brand-accent font-bold mt-2 hover:underline"
+              onClick={() => applyFilters("All", "All")}
+              className="text-brand-accent font-bold mt-4 hover:underline"
             >
-              Clear Filters
+              Reset Everything
             </button>
           </div>
         ) : (
@@ -378,8 +497,10 @@ export default function Home() {
 
                       {cafe.avg_price > 0 && (
                         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold text-brand-primary shadow-sm border border-white/20">
-                          {/* Simple currency check */}
-                          {cafe.country === "Bangladesh" ? "৳" : "$"}{" "}
+                          {cafe.country === "Bangladesh" ||
+                          cafe.location.includes("Dhaka")
+                            ? "৳"
+                            : "$"}{" "}
                           {cafe.avg_price}
                         </div>
                       )}
