@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import { Providers } from "@/components/Providers"; // <--- Import this
+import { Providers } from "@/components/Providers";
+import { CommandMenu } from "@/components/CommandMenu"; // <--- Added Global Search
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -22,7 +23,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      {/* Add suppressHydrationWarning here 👇 */}
       <body
         suppressHydrationWarning={true}
         className={cn(
@@ -30,7 +30,11 @@ export default function RootLayout({
           jakarta.variable
         )}
       >
-        {children}
+        <Providers>
+          {/* Cmd+K Search Modal available globally */}
+          <CommandMenu />
+          {children}
+        </Providers>
       </body>
     </html>
   );

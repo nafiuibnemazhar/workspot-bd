@@ -1,41 +1,41 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { Metadata } from "next";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
-import dynamic from "next/dynamic"; // Vital for Maps
-import { Loader2 } from "lucide-react";
+import MapWrapper from "@/components/MapWrapper"; // <--- Import the wrapper
+import { MapPin } from "lucide-react";
 
-// We dynamically import the Map component to prevent Server-Side Rendering (SSR) crashes
-const FullScreenMap = dynamic(() => import("@/components/FullScreenMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-screen w-full bg-brand-surface flex items-center justify-center">
-      <Loader2 className="animate-spin text-brand-accent" size={48} />
-      <span className="ml-4 font-bold text-brand-primary">Loading Map...</span>
-    </div>
-  ),
-});
+export const metadata: Metadata = {
+  title: "Interactive Map | WorkSpot",
+  description:
+    "Explore laptop-friendly cafes and workspaces on our global map.",
+};
 
-export default function MapPage() {
-  const [cafes, setCafes] = useState<any[]>([]);
+export default async function MapPage() {
+  // 1. Server-Side Fetching (Fast & Safe)
+  const { data: cafes } = await supabase
+    .from("cafes")
+    .select(
+      "id, name, slug, latitude, longitude, avg_price, rating, cover_image, city, country"
+    )
+    .not("latitude", "is", null)
+    .not("longitude", "is", null);
 
-  useEffect(() => {
-    async function fetchCafes() {
-      const { data } = await supabase
-        .from("cafes")
-        .select("id, name, slug, latitude, longitude, avg_price, cover_image");
-      if (data) setCafes(data);
-    }
-    fetchCafes();
-  }, []);
+  const safeCafes = cafes || [];
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       <Navbar />
-      {/* The map takes up the remaining height minus navbar */}
-      <div className="flex-1 pt-20 relative z-0">
-        <FullScreenMap cafes={cafes} />
+
+      {/* Map Container */}
+      <div className="flex-1 relative pt-20 z-0">
+        {/* Floating Stats Overlay */}
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[400] bg-white/90 backdrop-blur-md px-6 py-2 rounded-full shadow-lg border border-gray-200 flex items-center gap-2 text-sm font-bold text-gray-700 pointer-events-none">
+          <MapPin size={16} className="text-brand-primary fill-brand-primary" />
+          {safeCafes.length} verified locations
+        </div>
+
+        {/* 2. Load the Map via Wrapper */}
+        <MapWrapper cafes={safeCafes} />
       </div>
     </div>
   );

@@ -27,18 +27,19 @@ import {
   Link as LinkIcon,
   Linkedin,
   Twitter,
-  Send,
   Banknote,
 } from "lucide-react";
 import Link from "next/link";
 import DOMPurify from "dompurify";
 import JsonLd from "@/components/JsonLd";
 
+// Dynamic Map Import
 const ViewMap = dynamic(() => import("@/components/ViewMap"), {
   ssr: false,
   loading: () => <div className="h-64 bg-gray-100 animate-pulse rounded-2xl" />,
 });
 
+// --- HELPER: FORMAT TIME ---
 function formatTime(timeStr: string) {
   if (!timeStr) return "";
   const [hours, minutes] = timeStr.split(":");
@@ -48,6 +49,7 @@ function formatTime(timeStr: string) {
   return `${h12}:${minutes} ${ampm}`;
 }
 
+// --- HELPER: OPEN STATUS ---
 const isOpenNow = (openTime: string, closeTime: string) => {
   if (!openTime || !closeTime) return null;
   const now = new Date();
@@ -66,17 +68,27 @@ const getCurrency = (cafe: any) => {
   return "$";
 };
 
-// --- HELPER: GET FULL ADDRESS ---
+// --- HELPER: SMART ADDRESS DISPLAY ---
 const getAddress = (cafe: any) => {
-  if (cafe.city) {
+  // Strategy 1: USA (Standard Address Format)
+  if (cafe.country === "USA") {
     return [cafe.address_street, cafe.city, cafe.state]
       .filter(Boolean)
       .join(", ");
   }
-  return cafe.location || "Unknown Location";
+
+  // Strategy 2: Bangladesh (Neighborhood Focus)
+  // We use the 'location' field which likely contains "Area, Street" from our Add Cafe logic
+  // and append the City (Dhaka) for context.
+  if (cafe.location) {
+    return `${cafe.location}, ${cafe.city}`;
+  }
+
+  // Fallback
+  return cafe.address_street || "Location details unavailable";
 };
 
-// ... (ICONS REMAIN THE SAME - HIDDEN FOR BREVITY) ...
+// ... (Keep your existing Icons here: GoogleIcon, WhatsAppIcon, MessengerIcon) ...
 const GoogleIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     width={size}
@@ -178,18 +190,16 @@ export default function CafeDetails() {
     let url = "";
 
     if (cafe.latitude && cafe.longitude) {
-      url = `https://www.google.com/maps/dir/?api=1&destination=${cafe.latitude},${cafe.longitude}`;
+      url = `https://www.google.com/maps/search/?api=1&query=${cafe.latitude},${cafe.longitude}`;
     } else {
-      const addressQuery = [
-        cafe.name,
-        cafe.address_street,
-        cafe.city,
-        cafe.state,
-      ]
-        .filter(Boolean)
-        .join(" ");
-      const query = encodeURIComponent(addressQuery || cafe.location);
-      url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
+      // Smart Fallback for Directions
+      const addressQuery =
+        cafe.country === "USA"
+          ? `${cafe.address_street}, ${cafe.city}, ${cafe.state}`
+          : `${cafe.location}, ${cafe.city}`;
+
+      const query = encodeURIComponent(addressQuery);
+      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
     }
     window.open(url, "_blank");
   };
@@ -224,55 +234,43 @@ export default function CafeDetails() {
   const displayAddress = getAddress(cafe);
   const currencySymbol = getCurrency(cafe);
 
-  // ---------------------------------------------------------
-  // 1. ADD THIS LOGIC BLOCK HERE (Schema Construction)
-  // ---------------------------------------------------------
-  const jsonLd = cafe
-    ? {
-        "@context": "https://schema.org",
-        "@type": "CafeOrCoffeeShop",
-        name: cafe.name,
-        image: [cafe.cover_image],
-        description: cafe.description,
-        address: {
-          "@type": "PostalAddress",
-          streetAddress: cafe.address_street || cafe.location,
-          addressLocality: cafe.city,
-          addressRegion: cafe.state,
-          addressCountry: cafe.country || "USA",
-        },
-        geo: {
-          "@type": "GeoCoordinates",
-          latitude: cafe.latitude,
-          longitude: cafe.longitude,
-        },
-        priceRange: cafe.avg_price
-          ? cafe.country === "USA"
-            ? "$$"
-            : "৳৳"
-          : "$",
-        telephone: cafe.contact_number,
-        // Replace with your actual domain
-        url: `https://workspot-bd.com/cafe/${cafe.slug}`,
-        aggregateRating:
-          cafe.rating > 0
-            ? {
-                "@type": "AggregateRating",
-                ratingValue: cafe.rating,
-                reviewCount: 1, // Defaulting to 1 to avoid schema errors if count is missing
-                bestRating: "5",
-                worstRating: "1",
-              }
-            : undefined,
-      }
-    : null;
-  // ---------------------------------------------------------
+  // --- JSON-LD SCHEMA (Global SEO) ---
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CafeOrCoffeeShop",
+    name: cafe.name,
+    image: [cafe.cover_image],
+    description: cafe.description,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: cafe.address_street || cafe.location,
+      addressLocality: cafe.city,
+      addressRegion: cafe.state,
+      addressCountry: cafe.country || "USA",
+    },
+    geo: {
+      "@type": "GeoCoordinates",
+      latitude: cafe.latitude,
+      longitude: cafe.longitude,
+    },
+    priceRange: cafe.avg_price ? (cafe.country === "USA" ? "$$" : "৳৳") : "$",
+    telephone: cafe.contact_number,
+    url: `https://workspot-bd.com/cafe/${cafe.slug}`,
+    aggregateRating:
+      cafe.rating > 0
+        ? {
+            "@type": "AggregateRating",
+            ratingValue: cafe.rating,
+            reviewCount: 1,
+            bestRating: "5",
+            worstRating: "1",
+          }
+        : undefined,
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
-      {/* 2. ADD THIS COMPONENT HERE (Schema Injection) */}
-      {jsonLd && <JsonLd data={jsonLd} />}
-
+      <JsonLd data={jsonLd} />
       <Navbar />
 
       {isOwner && (
@@ -284,7 +282,6 @@ export default function CafeDetails() {
         </Link>
       )}
 
-      {/* Share Modal */}
       <ShareModal
         isOpen={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
@@ -292,7 +289,7 @@ export default function CafeDetails() {
         title={cafe.name}
       />
 
-      {/* HERO */}
+      {/* HERO SECTION */}
       <div className="relative h-[50vh] w-full bg-brand-primary">
         {cafe.cover_image ? (
           <img
@@ -305,7 +302,7 @@ export default function CafeDetails() {
             WorkSpot
           </div>
         )}
-        <div className="absolute inset-0 bg-linear-to-t from-gray-50 via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-50 via-transparent to-transparent"></div>
         <div className="absolute top-24 left-6 md:left-20">
           <Link
             href="/"
@@ -316,10 +313,10 @@ export default function CafeDetails() {
         </div>
       </div>
 
-      {/* CONTENT */}
+      {/* MAIN CONTENT */}
       <div className="container mx-auto px-6 -mt-32 relative z-10 pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Left Column */}
+          {/* LEFT COLUMN: Info & Reviews */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 mb-8">
               <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
@@ -394,7 +391,7 @@ export default function CafeDetails() {
             <ReviewSection cafeId={cafe.id} />
           </div>
 
-          {/* Right Column */}
+          {/* RIGHT COLUMN: Status, Map, Contact */}
           <div className="lg:col-span-1">
             <div className="sticky top-28 space-y-6">
               <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100">
@@ -421,7 +418,7 @@ export default function CafeDetails() {
                     </span>
                   </div>
 
-                  {/* PRICE DISPLAY */}
+                  {/* SMART PRICE DISPLAY */}
                   {cafe.avg_price > 0 && (
                     <div className="flex items-center gap-3 text-gray-600">
                       <Banknote size={18} />
@@ -495,6 +492,7 @@ export default function CafeDetails() {
                 )}
               </div>
 
+              {/* DYNAMIC MAP */}
               <div className="bg-white rounded-3xl p-2 shadow-sm border border-gray-100 h-64 overflow-hidden relative z-0">
                 {cafe.latitude && cafe.longitude ? (
                   <ViewMap
@@ -520,7 +518,7 @@ export default function CafeDetails() {
   );
 }
 
-// ... (Keep AmenityItem and ShareModal same as before) ...
+// ... (Keep existing Helper Components: AmenityItem, ShareModal) ...
 function AmenityItem({
   icon,
   label,
@@ -613,7 +611,6 @@ function ShareModal({
             </div>
             <span className="text-xs font-medium text-gray-600">Messenger</span>
           </a>
-          {/* Add more icons as needed (copy from previous if required) */}
           <a
             href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`}
             target="_blank"

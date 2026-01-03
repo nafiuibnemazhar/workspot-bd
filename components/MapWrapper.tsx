@@ -1,19 +1,20 @@
-'use client'; // <--- This marks the boundary
+"use client";
 
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
+import { Loader2 } from "lucide-react";
 
-// We move the dynamic import HERE, inside a Client Component
-const CafeMap = dynamic(() => import('./CafeMap'), { 
+// Dynamically import the actual map component here
+// This isolates the 'ssr: false' logic to the client side
+const FullScreenMap = dynamic(() => import("@/components/FullScreenMap"), {
   ssr: false,
-  loading: () => <div className="h-full w-full bg-brand-light animate-pulse rounded-2xl flex items-center justify-center text-brand-dark/20">Loading Map...</div>
+  loading: () => (
+    <div className="h-full w-full flex flex-col items-center justify-center text-brand-muted animate-pulse bg-gray-50">
+      <Loader2 className="animate-spin mb-4 text-brand-primary" size={48} />
+      <span className="font-bold text-lg">Locating Workspaces...</span>
+    </div>
+  ),
 });
 
-interface MapWrapperProps {
-  lat: number;
-  long: number;
-  title: string;
-}
-
-export default function MapWrapper({ lat, long, title }: MapWrapperProps) {
-  return <CafeMap lat={lat} long={long} title={title} />;
+export default function MapWrapper({ cafes }: { cafes: any[] }) {
+  return <FullScreenMap cafes={cafes} />;
 }

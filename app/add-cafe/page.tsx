@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
@@ -9,20 +9,38 @@ import {
   ArrowLeft,
   Plus,
   Loader2,
-  Link as LinkIcon,
   MapPin,
-  Image as ImageIcon,
   UploadCloud,
   Clock,
-  DollarSign,
   Star,
-  Globe,
   Facebook,
   Instagram,
   Phone,
-  Map,
+  Globe,
+  Map as MapIcon,
 } from "lucide-react";
 import Link from "next/link";
+
+// --- GLOBAL CONSTANTS ---
+const COUNTRIES = ["USA", "Bangladesh"];
+
+const US_STATES = [
+  { code: "NC", name: "North Carolina" },
+  { code: "TX", name: "Texas" },
+  { code: "WA", name: "Washington" },
+  { code: "CA", name: "California" },
+  { code: "NY", name: "New York" },
+];
+
+const BD_HUBS = [
+  "Gulshan",
+  "Banani",
+  "Dhanmondi",
+  "Uttara",
+  "Mirpur",
+  "Agargaon",
+  "Mohammadpur",
+];
 
 export default function AddCafePage() {
   const router = useRouter();
@@ -37,12 +55,12 @@ export default function AddCafePage() {
     slug: "",
     description: "",
 
-    // --- NEW GLOBAL LOCATION FIELDS ---
-    address_street: "", // Replaces generic 'location' input
-    city: "",
-    state: "",
+    // --- LOCATION FIELDS ---
     country: "USA",
-    // ----------------------------------
+    state: "",
+    city: "",
+    address_street: "",
+    // -----------------------
 
     google_map: "",
     contact_number: "",
@@ -61,25 +79,22 @@ export default function AddCafePage() {
     avg_price: 0,
   });
 
-  // --- NEW: Handle Strategic City Selection ---
-  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedCity = e.target.value;
-    let newState = "";
+  const isUSA = formData.country === "USA";
+  const currencySymbol = isUSA ? "$" : "৳";
 
-    // Auto-fill State based on Strategy
-    if (selectedCity === "Cary") newState = "NC";
-    else if (selectedCity === "Frisco") newState = "TX";
-    else if (selectedCity === "Bellevue") newState = "WA";
-    else if (selectedCity === "Berkeley") newState = "CA";
-    else if (selectedCity === "Seattle") newState = "WA";
-    else if (selectedCity === "Dhaka") newState = "Dhaka";
-
-    setFormData({
-      ...formData,
-      city: selectedCity,
-      state: newState,
-    });
-  };
+  // Auto-fill coordinates if Google Map link is pasted
+  useEffect(() => {
+    if (formData.google_map.includes("@")) {
+      const parts = formData.google_map.split("@")[1].split(",");
+      if (parts.length >= 2) {
+        setFormData((prev) => ({
+          ...prev,
+          latitude: parts[0],
+          longitude: parts[1],
+        }));
+      }
+    }
+  }, [formData.google_map]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -90,7 +105,7 @@ export default function AddCafePage() {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `covers/${fileName}`;
       const { error: uploadError } = await supabase.storage
-        .from("cafes") // Ensure this bucket exists!
+        .from("cafes")
         .upload(filePath, file);
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("cafes").getPublicUrl(filePath);
@@ -104,11 +119,11 @@ export default function AddCafePage() {
   };
 
   const handleSubmit = async () => {
-    // Validation: Check Name and City
-    if (!formData.name || !formData.city) {
-      alert("Please fill in Name and City.");
-      return;
-    }
+    if (!formData.name) return alert("Name is required");
+    if (!formData.city)
+      return alert(isUSA ? "City is required" : "Area is required");
+    if (isUSA && !formData.state) return alert("State is required for USA");
+
     setSubmitting(true);
 
     const finalSlug =
@@ -121,40 +136,45 @@ export default function AddCafePage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Construct legacy location string
-    const legacyLocation = `${formData.address_street}, ${formData.city}`;
+    // Backward compatibility location string
+    let legacyLocation = isUSA
+      ? `${formData.address_street}, ${formData.city}, ${formData.state}`
+      : `${formData.address_street}, ${formData.city}, Dhaka`;
 
-    const { error } = await supabase.from("cafes").insert([
-      {
-        name: formData.name,
-        slug: finalSlug,
-        description: formData.description,
+    const payload = {
+      name: formData.name,
+      slug: finalSlug,
+      description: formData.description,
 
-        // GLOBAL FIELDS
-        city: formData.city,
-        state: formData.state,
-        country: formData.country,
-        location: legacyLocation, // Backward compatibility
+      country: formData.country,
+      state: isUSA ? formData.state : null,
+      city: isUSA ? formData.city : "Dhaka",
+      location: isUSA
+        ? legacyLocation
+        : `${formData.city}, ${formData.address_street}`,
 
-        google_map: formData.google_map,
-        contact_number: formData.contact_number,
-        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
-        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-        cover_image: formData.cover_image,
-        instagram_url: formData.instagram_url,
-        facebook_url: formData.facebook_url,
-        opening_time: formData.opening_time,
-        closing_time: formData.closing_time,
-        avg_price: formData.avg_price,
-        rating: formData.rating,
-        has_wifi: formData.has_wifi,
-        has_ac: formData.has_ac,
-        has_parking: formData.has_parking,
-        has_socket: formData.has_socket,
-        owner_id: user?.id, // Ensure your DB column is 'owner_id' or 'author_id' (check DB!)
-        created_at: new Date().toISOString(),
-      },
-    ]);
+      address_street: formData.address_street,
+
+      google_map: formData.google_map,
+      contact_number: formData.contact_number,
+      latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+      longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+      cover_image: formData.cover_image,
+      instagram_url: formData.instagram_url,
+      facebook_url: formData.facebook_url,
+      opening_time: formData.opening_time,
+      closing_time: formData.closing_time,
+      avg_price: formData.avg_price,
+      rating: formData.rating,
+      has_wifi: formData.has_wifi,
+      has_ac: formData.has_ac,
+      has_parking: formData.has_parking,
+      has_socket: formData.has_socket,
+      owner_id: user?.id,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("cafes").insert([payload]);
 
     if (error) {
       alert("Error: " + error.message);
@@ -180,10 +200,10 @@ export default function AddCafePage() {
             </Link>
             <div>
               <h1 className="text-2xl font-extrabold text-gray-900">
-                Add New Workspace
+                Add Workspace
               </h1>
               <p className="text-sm text-gray-500">
-                Help the remote community find their next focus spot
+                Contribute to the global database
               </p>
             </div>
           </div>
@@ -210,7 +230,7 @@ export default function AddCafePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* LEFT COLUMN */}
+          {/* LEFT COLUMN (MAIN CONTENT) */}
           <div className="lg:col-span-2 space-y-8">
             {/* 1. Basic Info */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
@@ -218,7 +238,7 @@ export default function AddCafePage() {
                 <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm">
                   01
                 </span>{" "}
-                Basic Information
+                Basic Info
               </h3>
               <div className="space-y-6">
                 <div>
@@ -239,7 +259,6 @@ export default function AddCafePage() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Description
                   </label>
-                  {/* Assuming RichEditor handles generic string updates */}
                   <RichEditor
                     value={formData.description}
                     onChange={(val) =>
@@ -297,62 +316,114 @@ export default function AddCafePage() {
               </div>
             </div>
 
-            {/* 3. Location (UPDATED FOR GLOBAL STRATEGY) */}
+            {/* 3. LOCATION */}
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-sm">
                   03
                 </span>{" "}
-                Location
+                Location Details
               </h3>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CITY SELECTOR */}
-                <div className="col-span-2 md:col-span-1">
+                {/* COUNTRY */}
+                <div className="col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    City (Target Hubs)
+                    Country
                   </label>
                   <div className="relative">
-                    <MapPin
+                    <Globe
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                       size={16}
                     />
                     <select
-                      value={formData.city}
-                      onChange={handleCityChange}
+                      value={formData.country}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          country: e.target.value,
+                          state: "",
+                          city: "",
+                        })
+                      }
                       className="w-full pl-10 p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-bold text-gray-800"
                     >
-                      <option value="">Select City...</option>
-                      <option value="Cary">Cary, NC</option>
-                      <option value="Frisco">Frisco, TX</option>
-                      <option value="Bellevue">Bellevue, WA</option>
-                      <option value="Berkeley">Berkeley, CA</option>
-                      <option value="Seattle">Seattle, WA</option>
-                      <option value="Dhaka">Dhaka (Legacy)</option>
-                      <option value="Other">Other...</option>
+                      {COUNTRIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
-                {/* STATE AUTO-FILL */}
-                <div className="col-span-2 md:col-span-1">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.state}
-                    onChange={(e) =>
-                      setFormData({ ...formData, state: e.target.value })
-                    }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
-                    placeholder="e.g. NC"
-                  />
-                </div>
+                {/* USA FIELDS */}
+                {isUSA && (
+                  <>
+                    <div className="col-span-2 md:col-span-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        State
+                      </label>
+                      <select
+                        value={formData.state}
+                        onChange={(e) =>
+                          setFormData({ ...formData, state: e.target.value })
+                        }
+                        className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                      >
+                        <option value="">Select State...</option>
+                        {US_STATES.map((s) => (
+                          <option key={s.code} value={s.code}>
+                            {s.name} ({s.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value })
+                        }
+                        className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                        placeholder="e.g. Cary"
+                      />
+                    </div>
+                  </>
+                )}
 
-                {/* STREET ADDRESS */}
+                {/* BD FIELDS */}
+                {!isUSA && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Neighborhood (Area)
+                    </label>
+                    <select
+                      value={formData.city}
+                      onChange={(e) =>
+                        setFormData({ ...formData, city: e.target.value })
+                      }
+                      className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
+                    >
+                      <option value="">Select Area...</option>
+                      {BD_HUBS.map((area) => (
+                        <option key={area} value={area}>
+                          {area}
+                        </option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* SHARED ADDRESS */}
                 <div className="col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Street Address
+                    {isUSA ? "Street Address" : "House / Road / Block"}
                   </label>
                   <input
                     type="text"
@@ -364,42 +435,11 @@ export default function AddCafePage() {
                       })
                     }
                     className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none"
-                    placeholder="e.g. 122 E Chatham St"
+                    placeholder={isUSA ? "123 Main St" : "House 5, Road 11"}
                   />
                 </div>
 
-                {/* Coordinates */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Latitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.latitude}
-                    onChange={(e) =>
-                      setFormData({ ...formData, latitude: e.target.value })
-                    }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
-                    placeholder="35.7915"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Longitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.longitude}
-                    onChange={(e) =>
-                      setFormData({ ...formData, longitude: e.target.value })
-                    }
-                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
-                    placeholder="-78.7811"
-                  />
-                </div>
-
+                {/* GOOGLE MAPS & COORDS */}
                 <div className="col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Google Maps Link
@@ -411,14 +451,50 @@ export default function AddCafePage() {
                       setFormData({ ...formData, google_map: e.target.value })
                     }
                     className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none text-sm text-blue-600"
-                    placeholder="https://maps.google.com..."
+                    placeholder="https://goo.gl/maps/..."
+                  />
+                  <p className="text-xs text-gray-400 mt-1 ml-1">
+                    Tip: Pasting a map link will auto-fill Lat/Lng below if
+                    available.
+                  </p>
+                </div>
+
+                {/* --- LAT/LONG FIELDS (ADDED BACK) --- */}
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1">
+                    <MapIcon size={14} className="text-gray-400" /> Latitude
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.latitude}
+                    onChange={(e) =>
+                      setFormData({ ...formData, latitude: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
+                    placeholder="e.g. 35.7915"
+                  />
+                </div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1">
+                    <MapIcon size={14} className="text-gray-400" /> Longitude
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.longitude}
+                    onChange={(e) =>
+                      setFormData({ ...formData, longitude: e.target.value })
+                    }
+                    className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 outline-none font-mono text-sm"
+                    placeholder="e.g. -78.7811"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* RIGHT COLUMN */}
+          {/* RIGHT COLUMN (META) */}
           <div className="space-y-6">
             {/* 4. Operations */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
@@ -456,13 +532,12 @@ export default function AddCafePage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 mb-1 block">
-                    Avg Price ($)
+                    Avg Price ({currencySymbol})
                   </label>
                   <div className="relative">
-                    <DollarSign
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
+                      {currencySymbol}
+                    </span>
                     <input
                       type="number"
                       value={formData.avg_price || ""}
@@ -538,7 +613,6 @@ export default function AddCafePage() {
                 Contact & Social
               </h3>
               <div className="space-y-3">
-                {/* Phone Field */}
                 <div className="relative">
                   <Phone
                     size={16}
@@ -557,7 +631,6 @@ export default function AddCafePage() {
                     placeholder="Phone number"
                   />
                 </div>
-
                 <div className="relative">
                   <Instagram
                     size={16}
@@ -590,31 +663,6 @@ export default function AddCafePage() {
                     className="w-full pl-9 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs"
                     placeholder="Facebook URL"
                   />
-                </div>
-                <div className="pt-2 border-t border-gray-100 mt-2">
-                  <label className="text-xs font-bold text-gray-500 mb-1 block">
-                    URL Slug
-                  </label>
-                  <div className="relative">
-                    <LinkIcon
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
-                    <input
-                      type="text"
-                      value={formData.slug}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          slug: e.target.value
-                            .toLowerCase()
-                            .replace(/\s+/g, "-"),
-                        })
-                      }
-                      className="w-full pl-8 p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs font-mono text-brand-accent"
-                      placeholder="auto-generated"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
