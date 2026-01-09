@@ -25,9 +25,9 @@ import {
   Globe,
   X,
   Link as LinkIcon,
-  Linkedin,
   Twitter,
   Banknote,
+  Flag,
 } from "lucide-react";
 import Link from "next/link";
 import DOMPurify from "dompurify";
@@ -70,25 +70,18 @@ const getCurrency = (cafe: any) => {
 
 // --- HELPER: SMART ADDRESS DISPLAY ---
 const getAddress = (cafe: any) => {
-  // Strategy 1: USA (Standard Address Format)
   if (cafe.country === "USA") {
     return [cafe.address_street, cafe.city, cafe.state]
       .filter(Boolean)
       .join(", ");
   }
-
-  // Strategy 2: Bangladesh (Neighborhood Focus)
-  // We use the 'location' field which likely contains "Area, Street" from our Add Cafe logic
-  // and append the City (Dhaka) for context.
   if (cafe.location) {
     return `${cafe.location}, ${cafe.city}`;
   }
-
-  // Fallback
   return cafe.address_street || "Location details unavailable";
 };
 
-// ... (Keep your existing Icons here: GoogleIcon, WhatsAppIcon, MessengerIcon) ...
+// --- CUSTOM SOCIAL ICONS ---
 const GoogleIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     width={size}
@@ -185,23 +178,28 @@ export default function CafeDetails() {
     fetchData();
   }, [params?.slug]);
 
+  // --- UPDATED DIRECTIONS LOGIC ---
   const handleGetDirections = () => {
     if (!cafe) return;
-    let url = "";
+
+    // Using Google Maps "dir" (Directions) mode
+    // api=1: Use Universal Link
+    // destination: The cafe's coordinates or address
+    // origin: Omitted (Defaults to user's current location)
+    const baseUrl = "https://www.google.com/maps/dir/?api=1";
+    let destination = "";
 
     if (cafe.latitude && cafe.longitude) {
-      url = `https://www.google.com/maps/search/?api=1&query=${cafe.latitude},${cafe.longitude}`;
+      destination = `${cafe.latitude},${cafe.longitude}`;
     } else {
-      // Smart Fallback for Directions
       const addressQuery =
         cafe.country === "USA"
           ? `${cafe.address_street}, ${cafe.city}, ${cafe.state}`
           : `${cafe.location}, ${cafe.city}`;
-
-      const query = encodeURIComponent(addressQuery);
-      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+      destination = encodeURIComponent(addressQuery);
     }
-    window.open(url, "_blank");
+
+    window.open(`${baseUrl}&destination=${destination}`, "_blank");
   };
 
   if (loading)
@@ -262,8 +260,6 @@ export default function CafeDetails() {
             "@type": "AggregateRating",
             ratingValue: cafe.rating,
             reviewCount: 1,
-            bestRating: "5",
-            worstRating: "1",
           }
         : undefined,
   };
@@ -319,6 +315,35 @@ export default function CafeDetails() {
           {/* LEFT COLUMN: Info & Reviews */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 mb-8">
+              {/* NEW: Breadcrumbs */}
+              <nav className="flex items-center gap-2 text-xs md:text-sm text-gray-500 mb-4 animate-fade-in-up">
+                <Link
+                  href="/"
+                  className="hover:text-brand-primary transition-colors"
+                >
+                  Home
+                </Link>
+                <span className="text-gray-300">/</span>
+                <Link
+                  href={
+                    cafe.country === "USA"
+                      ? `/locations/usa/${cafe.state?.toLowerCase()}/${cafe.city
+                          ?.toLowerCase()
+                          .replace(/ /g, "-")}`
+                      : `/locations/bangladesh/dhaka/${cafe.location?.toLowerCase()}`
+                  }
+                  className="hover:text-brand-primary transition-colors capitalize"
+                >
+                  {cafe.country === "USA"
+                    ? cafe.city
+                    : cafe.location || cafe.city}
+                </Link>
+                <span className="text-gray-300">/</span>
+                <span className="text-brand-primary font-medium truncate max-w-[150px]">
+                  {cafe.name}
+                </span>
+              </nav>
+
               <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
                 <div>
                   <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
@@ -386,6 +411,18 @@ export default function CafeDetails() {
                   active={cafe.has_socket}
                 />
               </div>
+
+              {/* NEW: Report Button */}
+              <div className="mt-8 pt-6 border-t border-gray-100 flex justify-center">
+                <button
+                  onClick={() =>
+                    (window.location.href = `mailto:support@workspot-bd.com?subject=Report Issue: ${cafe.name}`)
+                  }
+                  className="text-xs font-bold text-gray-400 hover:text-red-500 flex items-center gap-1.5 transition-colors"
+                >
+                  <Flag size={14} /> Report incorrect information
+                </button>
+              </div>
             </div>
 
             <ReviewSection cafeId={cafe.id} />
@@ -418,7 +455,6 @@ export default function CafeDetails() {
                     </span>
                   </div>
 
-                  {/* SMART PRICE DISPLAY */}
                   {cafe.avg_price > 0 && (
                     <div className="flex items-center gap-3 text-gray-600">
                       <Banknote size={18} />
@@ -518,7 +554,7 @@ export default function CafeDetails() {
   );
 }
 
-// ... (Keep existing Helper Components: AmenityItem, ShareModal) ...
+// ... (Helper Components below) ...
 function AmenityItem({
   icon,
   label,
